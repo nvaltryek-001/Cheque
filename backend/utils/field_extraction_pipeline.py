@@ -1,4 +1,4 @@
-import re
+﻿import re
 from datetime import datetime
 from typing import Dict, Tuple
 
@@ -89,8 +89,9 @@ class FieldExtractor:
         self.log_extraction("bank_name", "unavailable", None, 0.0)
         return None, 0.0
 
+
     def _micr_line_candidates(self, text):
-        """Extract cheque serial and MICR candidates from bottom MICR lines."""
+        """Extract six-digit cheque serial + nine-digit MICR from OCR text."""
         lines = [
             line.strip()
             for line in str(text or "").splitlines()
@@ -99,35 +100,57 @@ class FieldExtractor:
 
         candidates = []
 
-        for line in lines[-6:]:
-            # Require MICR-like punctuation to avoid ordinary account numbers.
-            if ":" not in line or ('"' not in line and "'" not in line):
+        blocked = re.compile(
+            r"\b(?:ACCOUNT|A\s*/?\s*C|IFSC|IFS\s+CODE|DATE|"
+            r"RUPEES|AMOUNT|PAY|PIN\s*CODE|MOBILE|PHONE)\b",
+            re.I
+        )
+
+        labelled = re.compile(
+            r"\b(?:MICR|CHEQUE|CHECK|CHQ)\b", re.I
+        )
+
+        for index, line in enumerate(lines):
+            if blocked.search(line):
                 continue
 
-            # OCR may concatenate all printed MICR groups.
-            digits = re.sub(r"[^0-9]", "", line)
+            runs = re.findall(r"\d+", line)
+            digits = "".join(runs)
 
             if len(digits) < 15:
                 continue
 
-            cheque_candidate = digits[:6]
-            micr_candidate = digits[6:15]
+            # First six digits = cheque serial.
+            # Next nine digits = MICR.
+            # Any following digits are auxiliary MICR symbols/noise.
+            cheque = digits[:6]
+            micr = digits[6:15]
 
-            if len(cheque_candidate) != 6 or len(micr_candidate) != 9:
+            if len(cheque) != 6 or len(micr) != 9:
                 continue
 
-            candidates.append(
-                (cheque_candidate, micr_candidate, line)
+            bottom_region = index >= max(
+                0, int(len(lines) * 0.45)
             )
 
-        # Return only unique pairs. Never choose between conflicting candidates.
+            has_micr_context = bool(labelled.search(line))
+            has_micr_structure = len(runs) >= 2 or len(digits) > 15
+
+            if not (
+                has_micr_context
+                or bottom_region
+                or has_micr_structure
+            ):
+                continue
+
+            candidates.append((cheque, micr, line))
+
+        # Remove duplicate pairs.
         unique = list(dict.fromkeys(
-            (candidate[0], candidate[1])
-            for candidate in candidates
+            (item[0], item[1]) for item in candidates
         ))
 
         return unique
-
     def extract_micr_code(self, text):
         # Syndicate Bank: MICR is printed after the quoted 6-digit cheque serial.
         # Restrict this special parser to the known SYNB0003011 cheque format.
@@ -150,6 +173,31 @@ class FieldExtractor:
                         micr, 0.90
                     )
                     return micr, 0.90
+
+
+        # Axis-specific: select the genuine bottom MICR line.
+        # Account-number lines contain exactly 15 digits; the MICR
+        # line contains the six-digit serial, nine-digit MICR,
+        # and additional MICR symbols/noise.
+        if re.search(r"\b(?:AXIS\s+BANK|UTIB\d{7})\b", text, re.I):
+            axis_pairs = []
+            candidates = self._micr_line_candidates(text)
+
+            for line in reversed(text.splitlines()[-6:]):
+                digits = re.sub(r"\D", "", line)
+                if len(digits) <= 15:
+                    continue
+
+                pair = (digits[:6], digits[6:15])
+                if pair in candidates and pair not in axis_pairs:
+                    axis_pairs.append(pair)
+
+            if len(axis_pairs) == 1:
+                value = axis_pairs[0][1]
+                self.log_extraction(
+                    "micr_code", "axis_bottom_micr_line", value, 0.90
+                )
+                return value, 0.90
 
         candidates = self._micr_line_candidates(text)
         micrs = list(dict.fromkeys(micr for _, micr in candidates))
@@ -185,6 +233,34 @@ class FieldExtractor:
                         serial, 0.90
                     )
                     return serial, 0.90
+
+
+        # Axis-specific: extract the serial paired with the bottom MICR line.
+        if re.search(r"\b(?:AXIS\s+BANK|UTIB\d{7})\b", text, re.I):
+            axis_pairs = []
+            candidates = self._micr_line_candidates(text)
+
+            for line in reversed(text.splitlines()[-6:]):
+                digits = re.sub(r"\D", "", line)
+                if len(digits) <= 15:
+                    continue
+
+                pair = (digits[:6], digits[6:15])
+                if pair in candidates and pair not in axis_pairs:
+                    axis_pairs.append(pair)
+
+            if micr_code is not None:
+                axis_pairs = [
+                    pair for pair in axis_pairs
+                    if pair[1] == str(micr_code)
+                ]
+
+            if len(axis_pairs) == 1:
+                value = axis_pairs[0][0]
+                self.log_extraction(
+                    "cheque_number", "axis_bottom_micr_serial", value, 0.90
+                )
+                return value, 0.90
 
         candidates = self._micr_line_candidates(text)
         cheque_numbers = list(dict.fromkeys(
@@ -619,3 +695,4 @@ class FieldExtractor:
             "extraction_log": self.extraction_log,
             "has_blanks": any(v is None or v == "" for v in results.values())
         }
+
