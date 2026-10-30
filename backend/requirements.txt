@@ -1,0 +1,22 @@
+Flask>=3.0,<4
+Flask-CORS>=4.0
+opencv-python>=4.8
+numpy>=1.26
+requests>=2.31
+Werkzeug>=3.0
+python-dotenv>=1.0
+
+# Optional: For PaddleOCR integration (uncomment when integrating)
+# paddleocr==2.7.0.3
+# paddlepaddle==2.5.1
+
+# Optional: For Qwen2.5-VL integration (uncomment when integrating)
+# transformers==4.35.0
+# pillow==10.0.0
+# torch==2.0.0
+
+# Development
+pytest==7.4.3
+pytest-cov==4.1.0
+black==23.11.0
+flake8==6.1.0

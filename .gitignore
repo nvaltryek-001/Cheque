@@ -1,0 +1,100 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# Databases and private data
+*.db
+*.sqlite
+*.sqlite3
+new_datset/
+vaildate/
+datasets/
+private_data/
+uploads/
+
+# Model weights and generated binaries
+*.onnx
+*.pth
+*.pt
+*.h5
+*.joblib
+*.pkl
+*.bin
+
+# Reports and archives
+reports/
+_cleanup_archive/
+*.log
+*.bak
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# Generated frontend test output
+Frontend/playwright-report/
+Frontend/test-results/
+
+# Python generated output
+**/__pycache__/
+.pytest_cache/
+
+# Private cheque data
+new_datset/
+vaildate/
+datasets/
+private_data/
+uploads/
+reports/
+_cleanup_archive/
+
+# Local environments
+.venv/
+.venv*/
+node_modules/
+
+# Local databases and credentials
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+
+# Model files
+*.onnx
+*.pth
+*.pt
+*.h5
+*.pkl
+*.joblib
+*.bin
+
+# Generated files
+*.log
+*.tmp
+*.bak
