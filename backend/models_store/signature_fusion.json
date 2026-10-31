@@ -1,0 +1,62 @@
+{
+  "weights": {
+    "orb": 0.2216918894828529,
+    "sift": 1.3992687703233098,
+    "ssim": 0.0,
+    "hog": 0.18438752664440075,
+    "profile": 0.1715500373937593,
+    "chamfer": 0.0,
+    "density": 0.0,
+    "aspect": 0.07249947772460821
+  },
+  "bias": -0.3482674083118319,
+  "mean": {
+    "orb": 0.19338720262034928,
+    "sift": 0.31784740007197876,
+    "ssim": 0.697978511123658,
+    "hog": 0.4603241143864579,
+    "profile": 0.7074171071810529,
+    "chamfer": 0.29843022560414767,
+    "density": 0.7634761579384179,
+    "aspect": 0.6785281593387923
+  },
+  "std": {
+    "orb": 0.11024468330149813,
+    "sift": 0.21344859087537005,
+    "ssim": 0.08019070523327274,
+    "hog": 0.1847811957054643,
+    "profile": 0.1347287966017838,
+    "chamfer": 0.24608072392303554,
+    "density": 0.1524175204160231,
+    "aspect": 0.18664735670003185
+  },
+  "thresholds": {
+    "match": 0.8431,
+    "mismatch": 0.5394
+  },
+  "meta": {
+    "version": "fusion-lr-20261031063650-ef4c7123",
+    "trained_at": "2026-10-31T06:36:50+00:00",
+    "config": {
+      "positives_per_signer": 3,
+      "impostors_per_signer": 3,
+      "seed": 1337,
+      "target_far": 0.05,
+      "target_frr": 0.05,
+      "l2": 0.01,
+      "epochs": 3000,
+      "lr": 0.1
+    },
+    "features": [
+      "orb",
+      "sift",
+      "ssim",
+      "hog",
+      "profile",
+      "chamfer",
+      "density",
+      "aspect"
+    ],
+    "task": "reference-vs-query similarity; positives are simulated re-captures (see docs)"
+  }
+}

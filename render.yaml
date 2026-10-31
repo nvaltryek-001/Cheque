@@ -1,0 +1,21 @@
+# Render Blueprint – https://render.com/docs/blueprint-spec
+# Dashboard → New → Blueprint → pick this repository → set CV_ADMIN_PASSWORD → Apply.
+services:
+  - type: web
+    name: chequeverify-ai
+    runtime: docker
+    plan: starter            # a persistent disk needs a paid plan; on "free" all data is lost on restart
+    healthCheckPath: /api/health
+    envVars:
+      - key: CV_SECRET_KEY
+        generateValue: true
+      - key: CV_ADMIN_PASSWORD
+        sync: false          # you type it in the dashboard; never commit it
+      - key: CV_INSTANCE_DIR
+        value: /data/instance
+      - key: CV_MAX_UPLOAD_MB
+        value: "10"
+    disk:
+      name: chequeverify-data
+      mountPath: /data
+      sizeGB: 1

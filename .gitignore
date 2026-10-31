@@ -98,3 +98,17 @@ node_modules/
 *.log
 *.tmp
 *.bak
+
+# ChequeVerify v2 runtime data – cheque images, biometric specimens, database, secrets
+backend/instance/
+backend/.env
+# Original datasets are private and never committed
+/dataset/*
+!/dataset/PUT_OCR_DATASET_HERE.txt
+/signature/*
+!/signature/PUT_SIGNATURE_DATASET_HERE.txt
+Frontend/dist/
+# ...but keep the v2 audit / evaluation reports (they contain no images or per-cheque data)
+!/reports/
+/reports/*
+!/reports/final/

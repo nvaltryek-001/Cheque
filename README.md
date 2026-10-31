@@ -1,561 +1,259 @@
-# 🏦 ChequeVerify AI
-### Intelligent Cheque Processing, OCR Extraction & Signature Verification Platform
+# ChequeVerify AI
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Project-ChequeVerify%20AI-2563EB?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Python-Flask-3776AB?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Frontend-React-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
-  <img src="https://img.shields.io/badge/OCR-PaddleOCR-16A085?style=for-the-badge" />
-</p>
+Cheque OCR, field validation and signature verification for Indian CTS-2010 cheques –
+a Flask + React (TypeScript) web application with role-based access, full CRUD,
+audit logging, dataset auditing, model training/evaluation and PDF/CSV reporting.
 
-<p align="center">
-  <b>Automating cheque data extraction, intelligent validation and future-ready signature verification.</b>
-</p>
-
-<p align="center">
-  <a href="#-overview">Overview</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-roadmap">Roadmap</a> •
-  <a href="#-installation">Installation</a>
-</p>
+> **Decision support, not a guarantee.** Every OCR value carries a confidence and a
+> review status, and every signature result is MATCH / REVIEW / MISMATCH with its
+> reasons. An authorised person makes the final call.
 
 ---
 
-## 🌟 1. Project Overview
+## 1. Problem and objectives
 
-**ChequeVerify AI** is an intelligent cheque processing and verification platform designed to reduce manual cheque data entry and support automated cheque validation using Optical Character Recognition (OCR), image processing, and machine learning.
+Banks still key in cheque details by hand and compare signatures by eye. This project:
 
-The system accepts cheque images, extracts important banking information, validates extracted fields, and prepares structured results for further verification.
+1. Extracts the ten cheque fields from an image and validates them (IFSC format, bank/IFSC
+   consistency, amount-in-words vs figures, date validity, MICR/cheque-number format).
+2. Lets an administrator enroll authorised signers with one or more specimen signatures.
+3. Compares the signature on a cheque with the enrolled specimens and returns an
+   explained MATCH / REVIEW / MISMATCH decision for manual confirmation.
+4. Keeps a complete, exportable record (history, audit trail, PDF and CSV reports).
+5. Is honest about what the available data can and cannot support.
 
-The long-term objective is to integrate signature detection, authorized signature enrollment, and AI-powered signature similarity analysis into a unified cheque verification workflow.
+## 2. Features
 
-### 🎯 Project Objectives
-
-- Automate cheque information extraction using OCR.
-- Identify important cheque fields accurately.
-- Validate extracted information using field-specific rules.
-- Improve extraction performance across different bank cheque layouts.
-- Detect and crop cheque signature regions.
-- Compare cheque signatures with authorized specimen signatures.
-- Generate structured verification reports.
-- Support human review when automated verification is uncertain.
-
----
-
-## 🖥️ 2. Project Highlights
-
-| Component | Technology / Status |
+| Area | What works |
 |---|---|
-| Frontend | React + TypeScript + Vite |
-| Backend | Python + Flask |
-| OCR Engine | PaddleOCR |
-| Image Processing | OpenCV |
-| Data Validation | Python validation pipeline |
-| ML Components | Scikit-learn and model integration |
-| Signature Verification | Planned development |
-| API | Flask REST API |
-| Database Integration | Future enhancement |
+| Cheque OCR | Upload → quality check → OCR (PaddleOCR 3.x if installed, else Tesseract 5) → 10 fields with confidence/source/status → validation checks → automatic signature crop |
+| MICR | Dedicated E-13B reader (template model learned from the train split) for cheque number + MICR code |
+| Review | Edit any field; machine values are preserved and edits stored as corrections; reviewer notes; mark reviewed |
+| Batch | Up to 20 cheques per batch |
+| Enrollment | Signer CRUD, multiple specimens, quality gate, preprocessing preview, duplicate detection (same signer and across signers), replace/deactivate/delete, enrollment history, dataset import |
+| Verification | From a processed cheque (auto or manual crop) or an uploaded image; compares against all active specimens; reasons, feature scores, threshold scale; manual approve/reject |
+| Datasets | Live audits of both datasets; manifest-based browser |
+| Models | Readiness assessment; background training/evaluation jobs with history and metrics |
+| Reports | Per-cheque PDF; CSV exports (cheques, verifications, signers, audit log); audit/evaluation report downloads |
+| Security | Token auth, 3 roles, lockout, token revocation, upload validation by content, private storage, audited biometric access, masked account numbers |
 
-### 📊 Current Development Snapshot
+### Screens
+Dashboard · Cheque verification · Cheque detail · Signature verification · Signature enrollment ·
+Signer detail · Batch processing · OCR dataset · Signature dataset · Model training · Analytics ·
+Verification history · Reports · Settings (thresholds, users, password, audit log).
 
-- 10 cheque information fields targeted for extraction.
-- 5 bank categories covered in the current regression work.
-- 74 source and documentation files in the initial GitHub commit.
-- OCR extraction pipeline and frontend/backend source included in the repository.
-
-> These figures describe the current development scope and repository contents, not a guarantee of production accuracy or complete feature implementation.
-
----
-
-## 🏗️ 3. System Architecture
-
-The following diagram illustrates the intended end-to-end architecture.
-
-```mermaid
-flowchart TD
-    A["📷 Cheque Image Upload"] --> B["🖥️ React Frontend"]
-    B --> C["⚙️ Flask REST API"]
-    C --> D["🖼️ Image Preprocessing"]
-    D --> E["🔍 OCR Extraction Engine"]
-    E --> F["📋 Ten-Field Extraction"]
-    F --> G["✅ Field Validation"]
-    G --> H["📊 Structured Extraction Result"]
-    H --> I["🖊️ Signature Region Detection"]
-    I --> J["🧠 Signature Similarity Model"]
-    J --> K{"Verification Decision"}
-    K -->|High Confidence| L["✅ Verification Candidate"]
-    K -->|Low Confidence| M["👨‍💼 Manual Review"]
-    L --> N["📄 Final Verification Report"]
-    M --> N
-
-    classDef frontend fill:#2563eb,color:#fff,stroke:#1d4ed8
-    classDef backend fill:#0f766e,color:#fff,stroke:#115e59
-    classDef ocr fill:#7c3aed,color:#fff,stroke:#6d28d9
-    classDef future fill:#d97706,color:#fff,stroke:#b45309
-    classDef result fill:#15803d,color:#fff,stroke:#166534
-
-    class A,B frontend
-    class C,D,G backend
-    class E,F,H ocr
-    class I,J,K future
-    class L,M,N result
-```
-
-*Note: Signature detection, signature similarity and the complete final decision workflow are planned integration stages, not confirmed completed functionality.*
-
----
-
-## 🔍 4. OCR Extraction Pipeline
-
-The current extraction pipeline targets the following ten cheque fields:
-
-| No. | Field | Description |
-|---:|---|---|
-| 1 | Bank Name | Identifies the issuing bank |
-| 2 | Cheque Number | Extracts the cheque identification number |
-| 3 | MICR Code | Extracts the MICR information |
-| 4 | Account Number | Extracts the account number |
-| 5 | Date | Identifies the cheque date |
-| 6 | Payee Name | Extracts the beneficiary name |
-| 7 | Amount in Figures | Reads the numerical amount |
-| 8 | Amount in Words | Extracts the written amount |
-| 9 | IFSC Code | Identifies the bank branch code |
-| 10 | Branch Name | Extracts branch information |
-
-### 🔄 Extraction Workflow
+## 3. Architecture
 
 ```mermaid
 flowchart LR
-    A["Upload Image"] --> B["Preprocessing"]
-    B --> C["OCR Recognition"]
-    C --> D["Field Extraction"]
-    D --> E["Normalization"]
-    E --> F["Validation"]
-    F --> G["JSON Response"]
-
-    classDef step fill:#1d4ed8,color:#fff,stroke:#1e40af
-    classDef finish fill:#15803d,color:#fff,stroke:#166534
-
-    class A,B,C,D,E,F step
-    class G finish
+  UI["React + TypeScript (Vite)"] -->|"/api (Bearer token)"| API["Flask API"]
+  API --> AUTH["Auth & roles"]
+  API --> OCR["OCR pipeline"]
+  API --> SIG["Signature module"]
+  API --> DB[("SQLite")]
+  API --> FS[("Private storage<br/>UUID file names")]
+  OCR --> ENG["PaddleOCR 3.x / Tesseract 5"]
+  OCR --> MICR["E-13B MICR model"]
+  SIG --> PRE["Preprocessing"] --> FEAT["ORB · SIFT · SSIM · HOG · profiles · chamfer"] --> FUS["Fusion model + validated thresholds"]
+  API --> DS[("Original datasets – read only")]
 ```
 
-The extraction pipeline includes field-specific parsing and normalization logic for banking information, including date handling, IFSC validation, MICR parsing, cheque number extraction, and amount normalization.
+Cheque workflow: upload → validate file (magic bytes, size, decode) → image quality → OCR + MICR →
+10 fields → validation → signature detection/crop → (account number suggests an enrolled signer) →
+operator review → signature comparison (only if the signer has an active specimen) → manual
+approve/reject → PDF report → every step written to the audit log.
 
----
+## 4. Technology
 
-## ✨ 5. Implemented Features
+Backend: Python 3.12+, Flask 3, OpenCV, NumPy, ReportLab, SQLite (stdlib), Waitress (production).
+OCR: PaddleOCR 3.x (auto-detected) or the Tesseract 5 binary. Frontend: React 18, TypeScript 5,
+Vite 5 – no UI library; icons are inline SVG. Tests: pytest, Playwright (end-to-end, run during development).
 
-### ✅ Backend
-- Flask application and REST API.
-- Image upload and cheque processing endpoints.
-- PaddleOCR integration.
-- Ten-field extraction pipeline.
-- Field validation and normalization.
-- Bank-specific extraction improvements.
-- Confirmed-label handling without automatically replacing model predictions with ground-truth labels.
-- OCR diagnostics and evaluation scripts.
-
-### ✅ Frontend
-- React + TypeScript + Vite application.
-- Dashboard interface.
-- Frontend testing configuration.
-- API integration foundation.
-
-### ✅ Testing and Improvements
-- OCR regression testing framework.
-- Bank-specific extraction improvements.
-- Syndicate Bank extraction patch and five-image API regression.
-- Axis Bank and ICICI Bank test investigations.
-- Testing reports and project documentation.
-
----
-
-## 🚧 6. Remaining Development Work
-
-The following tasks represent the next major development milestones.
-
-### Phase 1 — OCR Accuracy & Reliability
-
-- [ ] Complete full regression testing across all available cheque images.
-- [ ] Verify extracted fields against manually confirmed ground truth.
-- [ ] Resolve remaining bank-specific extraction errors.
-- [ ] Improve MICR and cheque-number recognition.
-- [ ] Improve amount-in-words and numerical amount consistency.
-- [ ] Evaluate field-wise precision, recall and accuracy.
-- [ ] Generate a consolidated bank-wise evaluation report.
-
-### Phase 2 — Signature Detection & Cropping
-
-- [ ] Identify cheque signature regions.
-- [ ] Develop signature-region detection and cropping.
-- [ ] Improve image quality and remove background noise.
-- [ ] Normalize signature dimensions.
-- [ ] Handle rotated, faint and low-resolution signatures.
-- [ ] Create a signature preprocessing pipeline.
-
-### Phase 3 — Authorized Signature Enrollment
-
-- [ ] Develop authorized-user registration.
-- [ ] Capture and store specimen signatures.
-- [ ] Support multiple specimen signatures per authorized user.
-- [ ] Implement secure specimen storage.
-- [ ] Build a signature enrollment management interface.
-
-### Phase 4 — AI Signature Verification
-
-- [ ] Develop a Siamese Neural Network or signature embedding model.
-- [ ] Generate feature representations of signature images.
-- [ ] Compare cheque signatures with authorized specimens.
-- [ ] Calibrate similarity thresholds using validation data.
-- [ ] Evaluate false acceptance and false rejection rates.
-- [ ] Test genuine and forged signature samples.
-- [ ] Add an uncertain-result/manual-review mechanism.
-
-### Phase 5 — Frontend & Backend Integration
-
-- [ ] Complete cheque upload and processing UI.
-- [ ] Display extracted cheque fields.
-- [ ] Show field-level validation results.
-- [ ] Display signature detection and comparison results.
-- [ ] Build verification history.
-- [ ] Generate downloadable verification reports.
-- [ ] Improve error handling and API response consistency.
-
-### Phase 6 — Security, Testing & Deployment
-
-- [ ] Add authentication and role-based access.
-- [ ] Secure uploaded cheque images and specimen signatures.
-- [ ] Implement appropriate data retention controls.
-- [ ] Add API integration and end-to-end tests.
-- [ ] Optimize processing speed.
-- [ ] Complete production configuration.
-- [ ] Deploy frontend and backend.
-- [ ] Perform final system validation.
-
----
-
-## 🧠 7. Planned Signature Verification Architecture
-
-Signature verification is a major upcoming feature.
-
-The planned approach uses image preprocessing and deep-learning-based feature comparison.
-
-```mermaid
-flowchart TD
-    A["🖼️ Uploaded Cheque"] --> B["Signature Detection"]
-    B --> C["Signature Crop"]
-    C --> D["Image Preprocessing"]
-    D --> E["Feature Embedding"]
-    F["Authorized Specimen"] --> G["Specimen Preprocessing"]
-    G --> H["Reference Embedding"]
-    E --> I["Similarity Calculation"]
-    H --> I
-    I --> J{"Calibrated Threshold"}
-    J -->|Above Threshold| K["Potential Match"]
-    J -->|Below Threshold| L["Potential Mismatch"]
-    K --> M["Human Review / Decision"]
-    L --> M
-
-    classDef input fill:#2563eb,color:#fff,stroke:#1d4ed8
-    classDef model fill:#7c3aed,color:#fff,stroke:#6d28d9
-    classDef output fill:#15803d,color:#fff,stroke:#166534
-    classDef review fill:#d97706,color:#fff,stroke:#b45309
-
-    class A,F input
-    class B,C,D,E,G,H,I,J model
-    class K,L output
-    class M review
-```
-
-### Proposed Model Components
-
-| Component | Purpose |
-|---|---|
-| OpenCV | Image preprocessing |
-| Signature Detection | Locate signature region |
-| Siamese Network | Learn signature similarity |
-| Embedding Model | Extract signature features |
-| Similarity Metric | Compare feature vectors |
-| Threshold Calibration | Classify match confidence |
-| Human Review | Handle uncertain cases |
-
-**Important:** A similarity score is not definitive proof of authenticity. The model must be evaluated against representative genuine and forged samples, and uncertain cases should be reviewed by an authorized person.
-
----
-
-## 🛠️ 8. Technology Stack
-
-<p>
-  <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Flask-000000?style=flat-square&logo=flask&logoColor=white" />
-  <img src="https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black" />
-  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" />
-  <img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" />
-  <img src="https://img.shields.io/badge/OpenCV-5C3EE8?style=flat-square&logo=opencv&logoColor=white" />
-  <img src="https://img.shields.io/badge/PaddleOCR-16A085?style=flat-square" />
-  <img src="https://img.shields.io/badge/Scikit--learn-F7931E?style=flat-square&logo=scikitlearn&logoColor=white" />
-  <img src="https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white" />
-</p>
-
-| Layer | Technology |
-|---|---|
-| Programming Language | Python |
-| Backend Framework | Flask |
-| Frontend Framework | React |
-| Frontend Language | TypeScript |
-| Build Tool | Vite |
-| OCR | PaddleOCR |
-| Image Processing | OpenCV |
-| Machine Learning | Scikit-learn |
-| Version Control | Git & GitHub |
-
----
-
-## 📁 9. Project Structure
+## 5. Folder structure
 
 ```text
-ChequeA/
-│
+ChequeVerify/
 ├── backend/
-│   ├── api/
-│   │   └── routes.py
-│   ├── models/
-│   │   ├── ocr_extractor.py
-│   │   ├── ocr_extractor_local.py
-│   │   ├── quality_analyzer.py
-│   │   ├── verification_model.py
-│   │   ├── vlm_extractor.py
-│   │   └── vlm_extractor_local.py
-│   ├── utils/
-│   │   ├── cheque_fields.py
-│   │   ├── confirmed_labels.py
-│   │   ├── field_extraction_pipeline.py
-│   │   └── validators.py
-│   ├── app.py
-│   ├── config.py
+│   ├── app/
+│   │   ├── __init__.py          app factory, error handling, security headers, serves Frontend/dist
+│   │   ├── config.py            all settings (env vars / backend/.env)
+│   │   ├── db.py                SQLite schema + helpers
+│   │   ├── api/                 auth_routes, cheque_routes, signer_routes, verification_routes, system_routes
+│   │   ├── ocr/                 engine.py, fields.py, regions.py, micr.py, amounts.py, quality.py, evaluate.py
+│   │   ├── signature/           preprocess.py, compare.py, detect.py, training.py
+│   │   └── services/            auth, audit, storage, cheques, enrollment, datasets, jobs, models, reports
+│   ├── models_store/            micr_e13b.npz, signature_fusion.json (trained artefacts)
+│   ├── tests/                   pytest suite (54 tests)
+│   ├── manage.py                CLI: audit, train-micr, train-signature, eval-ocr, create-user, reset-password
+│   ├── run.py / wsgi.py         dev + production entry points
 │   ├── requirements.txt
-│   └── verification_service.py
-│
+│   └── .env.example
 ├── Frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── tests/
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── docs/
-│   ├── API_DOCUMENTATION.md
-│   ├── CURRENT_IMPLEMENTATION.md
-│   ├── DEVELOPMENT_ROADMAP.md
-│   ├── PROJECT_OBJECTIVES.md
-│   ├── SIGNATURE_VERIFICATION_DESIGN.md
-│   └── SYSTEM_ARCHITECTURE.md
-│
-├── scripts/
-│   ├── audit/
-│   ├── dataset/
-│   ├── diagnostics/
-│   ├── evaluation/
-│   └── maintenance/
-│
-├── training/
-│
-├── .gitignore
-├── README.md
-├── start.ps1
-└── Install-ChequeVerifyAI-ReactTS.ps1
+│   ├── src/                     main.tsx, App.tsx, api.ts, auth.tsx, router.ts, styles.css, components/, pages/
+│   ├── dist/                    production bundle from `npm run build` (not committed)
+│   ├── package.json, vite.config.ts, tsconfig.json, index.html
+├── docs/                        API.md, ARCHITECTURE.md, OCR_DATASET.md, SIGNATURE_DATASET.md, SECURITY.md
+├── reports/final/               audits, evaluations, test results, completion report
+├── dataset/                     ← put the OCR dataset here (train/ vaildate/ test/ <bank>/)
+├── signature/                   ← put the signature dataset here (genuine_signatures.csv …)
+├── legacy/                      the previous implementation (v1), kept unchanged
+├── Dockerfile, render.yaml      container + Render deployment
+├── .github/workflows/ci.yml     tests, frontend build, Docker smoke test
+├── start.ps1 / start.sh         one-command setup, run, dev mode and tests
+└── README.md
 ```
 
----
+## 6. Datasets
 
-## ⚙️ 10. Installation
+**OCR dataset (`dataset/`)** – 120 cheque images, 4 banks (Axis, Canara, ICICI, Syndicate),
+split 80/20/20 (5 per bank in val and test), no corrupted files, no exact duplicates or cross-split
+filename leakage. **There are no transcription labels**, and the filled-in fields are machine-printed,
+not handwritten (only the signature is handwritten). The only labels are weak: bank and split from
+folders, and the cheque number = filename stem (119/120 files). See `docs/OCR_DATASET.md`.
 
-### Prerequisites
+**Signature dataset (`signature/`)** – 120 genuine specimens (one per signer, 120 signers),
+240 synthetic alterations (2 per signer: random added/erased strokes), manifests valid, no missing or
+corrupted files, no signer in more than one split. One specimen per signer means signer-specific or
+Siamese training is **blocked**. See `docs/SIGNATURE_DATASET.md`.
 
-- Python 3.12 recommended for the current backend environment.
-- Node.js and npm.
-- Git.
-- Windows, Linux or macOS.
+## 7. Models and results (held-out test split, measured – not estimated)
 
-### Step 1 — Clone Repository
+| Component | What was trained | Test result |
+|---|---|---|
+| MICR E-13B reader | 480 glyph templates from 80 train cheques (labels = filename cheque number) | Cheque number exact match **20 of 20** test cheques (19/19 val). 95 % lower confidence bound ≈ 83 %. |
+| Field extraction (Tesseract 5.3.4) | Rules + region isolation; developed on train/val, test run once | Account number found in signature registry 18/20 · amount words = figures 17/20 · valid date 19/20 · all 10 fields filled except branch 85 %, account 90 %, date 95 % |
+| Handwritten OCR | — | **Blocked**: no handwritten fields, no transcriptions |
+| Signature fusion (logistic regression over 8 similarity features) | Train pairs only; thresholds on validation | ROC-AUC 0.864, EER 0.232. Different-signer pairs: AUC 0.998, 0/60 accepted. Synthetic alterations: AUC 0.66 – weak. At the validated match threshold: FAR 1 %, FRR 78 % (most genuine pairs go to REVIEW, by design) |
+| Signer-specific / Siamese | — | **Blocked**: needs several real specimens per signer |
+
+Full numbers, protocol and caveats: `reports/final/MODEL_EVALUATION.md`.
+Positive signature pairs are *simulated re-captures* of the single genuine image, because the dataset
+has no second genuine specimen – this is the main limitation of the signature results.
+
+## 8. Installation (Windows – your existing machine)
+
+Prerequisites: Python 3.12 (your `.venv312` works), Node.js 18+, and an OCR engine:
+either your existing PaddleOCR 3.x environment (auto-detected) or
+[Tesseract for Windows](https://github.com/UB-Mannheim/tesseract/wiki).
+
+```powershell
+cd N:\Cheque\ChequeVerify          # wherever you unzipped the project
+# 1. datasets (copied or pointed to – originals are never modified)
+#    either copy them to .\dataset and .\signature, or set paths in backend\.env
+copy backend\.env.example backend\.env
+notepad backend\.env               # e.g. CV_OCR_DATASET=N:\Cheque\ChequeA\dataset
+                                   #      CV_SIGNATURE_DATASET=N:\Cheque\ChequeA\signature
+# 2. install
+.\start.ps1 -Setup
+# 3. test
+.\start.ps1 -Test
+# 4. run (production build, one process, http://127.0.0.1:5000)
+.\start.ps1
+# or development mode with hot reload (Flask :5000 + Vite :5173)
+.\start.ps1 -Dev
+```
+
+If PowerShell blocks the script: `Set-ExecutionPolicy -Scope Process Bypass`.
+
+Manual equivalent:
+
+```powershell
+python -m venv .venv ; .\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+cd Frontend ; npm install ; npm run build ; cd ..
+cd backend ; python -m pytest -q ; python run.py --prod
+```
+
+Linux/macOS: `./start.sh setup`, `./start.sh test`, `./start.sh`, `./start.sh dev`
+(`sudo apt install tesseract-ocr` for the OCR engine).
+
+**First sign-in.** On first start the backend creates user `admin` and prints a random password in
+the terminal (or uses `CV_ADMIN_PASSWORD` from `.env`). Change it under Settings → Your password, then
+create operator/auditor accounts under Settings → Users.
+
+Suggested first steps in the app: Signature enrollment → *Import from dataset* (creates the 120 signers),
+then Cheque verification → upload a cheque from `dataset/test/...` → Verify signature.
+
+### Deploy (Docker / Render)
 
 ```bash
-git clone https://github.com/nvaltryek-001/Cheque.git
-cd Cheque
+docker build -t chequeverify .
+docker run -p 8000:8000 -e CV_ADMIN_PASSWORD='Choose-a-strong-one-123' -v chequeverify-data:/data chequeverify
 ```
+Or connect this repository to Render as a Blueprint (`render.yaml`). Full guide: `docs/DEPLOYMENT.md`.
+GitHub Actions (`.github/workflows/ci.yml`) runs the tests, the Vite build and a Docker smoke test on every push.
 
-### Step 2 — Setup Python Backend
+The previous implementation (v1) is preserved unchanged under `legacy/`.
 
-```powershell
+## 9. Configuration (`backend/.env`)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CV_OCR_DATASET`, `CV_SIGNATURE_DATASET` | `dataset`, `signature` | Dataset locations (absolute or relative to project root) |
+| `CV_OCR_ENGINE` | `auto` | `auto`, `paddle`, `tesseract`, `none` |
+| `CV_TESSERACT_CMD` | PATH / `C:\Program Files\Tesseract-OCR\tesseract.exe` | Tesseract binary |
+| `CV_SECRET_KEY` | random, stored in `backend/instance/secret_key` | Token signing key |
+| `CV_ADMIN_PASSWORD` | random, printed once | First admin password |
+| `CV_MAX_UPLOAD_MB` | 10 | Upload limit |
+| `CV_CORS_ORIGINS` | localhost:5173 | Only needed when the UI is served from another origin |
+| `CV_TOKEN_MAX_AGE` | 28800 | Session lifetime (seconds) |
+| `CV_INSTANCE_DIR`, `CV_STORAGE_DIR`, `CV_DATABASE`, `CV_MODELS_DIR`, `CV_REPORTS_DIR` | under backend/ | Storage locations |
+
+## 10. Command-line tasks
+
+```bash
 cd backend
-
-python -m venv .venv
-
-.\.venv\Scripts\Activate.ps1
-
-pip install --upgrade pip
-
-pip install -r requirements.txt
+python manage.py audit                    # both dataset audits -> reports/final/*_AUDIT.json
+python manage.py train-micr               # MICR templates (train) + val/test evaluation
+python manage.py train-signature          # fusion (train) + thresholds (val) + test evaluation
+python manage.py eval-ocr --split test    # field-extraction evaluation
+python manage.py create-user alice --role operator
+python manage.py reset-password admin
+python -m pytest -q                       # 54 backend tests
 ```
+The same jobs can be started from the Model training screen (admin).
 
-### Step 3 — Start Flask Backend
+## 11. Security
 
-```powershell
-python app.py
-```
+Summary (details in `docs/SECURITY.md` and `reports/final/SECURITY_AUDIT.md`): signed bearer tokens
+with server-side revocation, three roles enforced on every endpoint, enrollment admin-only, specimen
+images never public (admin/operator only, each view audited), uploads validated by content and stored
+under random names, path-traversal protection on every file endpoint, no stack traces or paths in
+errors, CSV formula-injection protection, account numbers masked in lists/exports/PDF, login lockout,
+strict CORS allow-list, security headers. **Not production-banking ready** without HTTPS, an external
+identity provider/MFA, encrypted storage, retention policies and an independent security test.
 
-### Step 4 — Setup Frontend
+## 12. Limitations
 
-Open another terminal:
+- The OCR dataset has no text labels: field accuracy can only be measured for the cheque number;
+  other fields are checked by self-consistency and cross-reference, not ground truth. Staff
+  corrections made in the app are the start of a real labelled set.
+- Fields on these cheques are typed; real handwritten cheques will perform worse with Tesseract.
+- Test cheques share templates with training cheques, so results on unseen layouts will be lower.
+- Signature verification: one specimen per signer, synthetic alterations only, simulated positive pairs,
+  20 test signers. Detection of small stroke alterations is weak (AUC ≈ 0.66).
+- In this dataset the enrolled specimens were cropped from the same cheque scans, so verifying those
+  cheques against them is not an independent test (it will usually say MATCH).
+- PaddleOCR adapter follows the documented 3.x API but was not executed in the build environment.
 
-```powershell
-cd Frontend
+## 13. Future scope
 
-npm install
+Collect ≥ 5 genuine specimens per signer and real skilled forgeries, then train a metric-learning model;
+label handwritten field crops (the review screen already records corrections) and fine-tune PaddleOCR
+recognition; layout detection for unseen templates; MFA/SSO; encrypted object storage; PostgreSQL.
 
-npm run dev
-```
+## 14. Troubleshooting
 
-### Step 5 — Access Application
-
-Open the local development URL displayed by Vite in your browser.
-
-> Exact API endpoints, environment variables and startup requirements should be checked against the current source files before production deployment.
-
----
-
-## 🧪 11. Testing Strategy
-
-Testing will cover the following areas:
-
-| Testing Area | Objective |
+| Symptom | Fix |
 |---|---|
-| OCR Testing | Check text extraction |
-| Field Validation | Verify extracted values |
-| Bank-wise Testing | Evaluate different cheque layouts |
-| Regression Testing | Detect performance regressions |
-| API Testing | Validate backend responses |
-| Frontend Testing | Check dashboard workflows |
-| Signature Testing | Evaluate genuine and forged samples |
-| Integration Testing | Verify complete processing flow |
+| "No OCR engine available" | Install Tesseract or activate the PaddleOCR environment; set `CV_TESSERACT_CMD` |
+| Fields all "missing" except cheque number | Same as above – MICR works without an OCR engine |
+| Dataset screens say "not found" | Set `CV_OCR_DATASET` / `CV_SIGNATURE_DATASET` in `backend/.env` |
+| Forgot admin password | `python manage.py reset-password admin` |
+| Account locked | Wait 5 minutes or reset the password |
+| `npm run build` type errors | `cd Frontend && npm install` (types come from `@types/react`) |
+| Port 5000 busy | `.\start.ps1 -Port 8000` |
 
-### OCR Evaluation Metrics
+## 15. Status
 
-- Field-wise accuracy.
-- Precision.
-- Recall.
-- F1-score.
-- Processing time.
-- Percentage of missing fields.
-- Bank-wise performance.
-
-A populated field is not automatically a correct field. Final accuracy must be measured against verified ground-truth labels.
-
----
-
-## 🗺️ 12. Development Roadmap
-
-```mermaid
-flowchart TD
-    A["Phase 1: OCR Development"] --> B["Phase 2: Extraction Reliability"]
-    B --> C["Phase 3: Signature Detection"]
-    C --> D["Phase 4: Specimen Enrollment"]
-    D --> E["Phase 5: AI Signature Verification"]
-    E --> F["Phase 6: Full Integration"]
-    F --> G["Phase 7: Security & Testing"]
-    G --> H["🚀 Production Release"]
-
-    classDef completed fill:#15803d,color:#fff,stroke:#166534
-    classDef ongoing fill:#2563eb,color:#fff,stroke:#1d4ed8
-    classDef planned fill:#d97706,color:#fff,stroke:#b45309
-
-    class A completed
-    class B ongoing
-    class C,D,E,F,G,H planned
-```
-
-| Milestone | Current Position |
-|---|---|
-| Initial backend and frontend | Implemented foundation |
-| OCR integration | Implemented |
-| Ten-field extraction | Implemented foundation |
-| Bank-wise reliability | Ongoing validation |
-| Signature detection | Planned |
-| Specimen enrollment | Planned |
-| AI signature verification | Planned |
-| Full integration | Planned |
-| Production deployment | Planned |
-
----
-
-## 🔐 13. Security & Privacy
-
-Cheque images and banking information are sensitive.
-
-The project should follow these principles:
-
-- Never commit real cheque images or private banking datasets.
-- Never publish API keys, passwords or environment secrets.
-- Store specimen signatures securely.
-- Restrict access to authorized users.
-- Use encrypted communication in production.
-- Avoid exposing account numbers in logs and reports.
-- Define secure data retention and deletion policies.
-- Maintain audit logs for sensitive verification operations.
-
----
-
-## 🎯 14. Future Enhancements
-
-- Advanced deep-learning OCR.
-- Automated bank layout classification.
-- Improved MICR recognition.
-- AI-powered signature verification.
-- Cheque tampering and alteration detection.
-- Duplicate cheque detection.
-- Risk scoring and anomaly detection.
-- Verification history and analytics dashboard.
-- Secure report generation.
-- Production-ready cloud deployment.
-
----
-
-## 📌 15. Project Status
-
-**Current stage:** OCR implementation and reliability improvement.
-
-The foundational frontend, backend, OCR extraction and validation components have been developed. The next major objective is to complete comprehensive OCR evaluation and build the signature detection and verification pipeline.
-
-This is an actively developing project. Features listed in the roadmap are planned unless explicitly identified as implemented.
-
----
-
-## 👨‍💻 16. Repository & Contribution
-
-**GitHub Repository:**  
-https://github.com/nvaltryek-001/Cheque
-
-**Default Branch:** `main`
-
-Contributions, suggestions, testing feedback and technical improvements are welcome.
-
-To contribute:
-
-1. Fork the repository.
-2. Create a feature branch.
-3. Implement and test your changes.
-4. Submit a pull request with a clear description.
-
----
-
-<p align="center">
-  <b>🏦 ChequeVerify AI</b>
-  <br/>
-  <i>From cheque image processing to intelligent verification.</i>
-  <br/><br/>
-  Built with Python, React, OCR and AI.
-</p>
+See `reports/final/FINAL_PROJECT_COMPLETION_REPORT.md` for what was built, tested and what remains.

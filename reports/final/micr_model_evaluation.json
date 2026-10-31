@@ -1,0 +1,35 @@
+{
+  "training": {
+    "train_cheques_used": 80,
+    "skipped": [],
+    "glyphs": 480,
+    "per_digit": {
+      "0": 99,
+      "1": 83,
+      "2": 55,
+      "3": 48,
+      "4": 33,
+      "5": 24,
+      "6": 51,
+      "7": 17,
+      "8": 21,
+      "9": 49
+    },
+    "missing_digits": []
+  },
+  "label_source": "6-digit filename stem = first MICR group",
+  "evaluation": {
+    "val": {
+      "labelled": 19,
+      "exact_match": 19,
+      "accuracy_pct": 100.0,
+      "errors": []
+    },
+    "test": {
+      "labelled": 20,
+      "exact_match": 20,
+      "accuracy_pct": 100.0,
+      "errors": []
+    }
+  }
+}
