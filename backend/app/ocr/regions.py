@@ -88,6 +88,21 @@ def text_rows(region: np.ndarray, min_ratio: float = 0.65, line_len_factor: floa
             continue
         x0 = min(c[1] for c in cl); x1 = max(c[1] + c[3] for c in cl)
         y0 = min(c[2] for c in cl); y1 = max(c[2] + c[4] for c in cl)
+        # The row extent comes from the tall glyphs; trailing/leading lower-case letters
+        # ("…tra", "…ee") are shorter and used to be cut off. Grow the row over adjacent
+        # letter-sized components that sit inside the row band.
+        band0, band1 = y0 - 0.25 * ref, y1 + 0.25 * ref
+        small = [c for c in comps if 0.3 * ref <= c[4] <= 1.6 * ref and c[3] <= 3.5 * ref
+                 and band0 <= c[2] + c[4] / 2 <= band1]
+        grown = True
+        while grown:
+            grown = False
+            for c in small:
+                cx0, cx1 = c[1], c[1] + c[3]
+                if x1 < cx1 and cx0 - x1 <= 0.9 * ref:
+                    x1, grown = cx1, True
+                elif cx0 < x0 and x0 - cx1 <= 0.9 * ref:
+                    x0, grown = cx0, True
         pad_y = int(ref * 0.35)
         ry0, ry1 = max(0, y0 - pad_y), min(H, y1 + pad_y)
         rx0, rx1 = max(0, x0 - int(ref)), min(W, x1 + int(ref))

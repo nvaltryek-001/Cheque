@@ -158,11 +158,38 @@ def _find_ifsc(text: str) -> str:
     return ""
 
 
+def _find_ifsc_conf(lines: list[Line]):
+    """Find the IFSC token and return (value, word confidence, raw OCR token)."""
+    for ln in lines:
+        words = ln.words or [(ln.text, ln.conf, 0, 0, 0, 0)]
+        joined = " ".join(w[0] for w in words)
+        if not _find_ifsc(joined):
+            continue
+        for i, w in enumerate(words):
+            for cand in (w[0], w[0] + (words[i + 1][0] if i + 1 < len(words) else "")):
+                fixed = _fix_ifsc(cand)
+                if re.fullmatch(r"[A-Z]{4}0[A-Z0-9]{6}", fixed or ""):
+                    return fixed, float(w[1]), cand
+        return _find_ifsc(joined), float(ln.conf), joined
+    return None
+
+
 def _find_branch(lines: list[Line], bank: str) -> tuple[str, float]:
     best, best_score, conf = "", 0, 0.0
     bank_words = set(bank.upper().split()) if bank else set()
     for ln in lines:
-        text = " ".join(w[0] for w in ln.words if w[1] >= 0.5 and re.search(r"[A-Za-z0-9]{2,}", w[0])) if ln.words else ln.text
+        ws = [w for w in ln.words if w[1] >= 0.5 and re.search(r"[A-Za-z0-9]{2,}", w[0])] if ln.words else []
+        bank_tokens = {b.replace(" ", "").upper() for _, b, _ in BANKS} | {k.upper() for k, _, _ in BANKS} | {"BANK", "LTD"}
+        while ws and re.sub(r"[^A-Za-z]", "", ws[0][0]).upper() in bank_tokens:
+            ws = ws[1:]
+        while ws and ws[-1][1] < 0.75 and not re.search(r"\d", ws[-1][0]):
+            ws = ws[:-1]
+        # an Indian address ends with the 6-digit PIN code: drop anything after it
+        for j, w in enumerate(ws):
+            if re.fullmatch(r"\d{6}[.,]?", w[0]) or (j and re.fullmatch(r"\d{3}", w[0]) and re.fullmatch(r"\d{3}", ws[j - 1][0])):
+                ws = ws[:j + 1]
+                break
+        text = " ".join(w[0] for w in ws) if ln.words else ln.text
         t = re.sub(r"[^\x20-\x7E]", " ", text).strip()
         t = re.sub(r"\s{2,}", " ", t)
         up = t.upper()
@@ -282,10 +309,12 @@ def _validate(fields: dict, today: date | None = None) -> dict:
         valid = bool(re.fullmatch(r"[A-Z]{4}0[A-Z0-9]{6}", ifsc))
         add("ifsc_format", "pass" if valid else "fail", "IFSC has 4 letters, a 0 and 6 alphanumerics." if valid else "IFSC format invalid.")
         bank = fields["bank_name"]["value"]
-        if valid and bank and ifsc[:4] in IFSC_TO_BANK:
-            same = IFSC_TO_BANK[ifsc[:4]] == bank
+        expected = next((code for _, name, code in BANKS if name == bank), None)
+        if valid and bank and expected:
+            same = ifsc[:4] == expected
             add("ifsc_bank_match", "pass" if same else "warn",
-                "IFSC prefix matches the bank name." if same else "IFSC prefix belongs to a different bank.")
+                "IFSC prefix matches the bank name." if same
+                else f"IFSC prefix {ifsc[:4]} does not match {bank} ({expected}).")
     acct = fields["account_number"]["value"]
     if acct:
         ok = 9 <= len(acct) <= 18 and acct.isdigit()
@@ -349,19 +378,26 @@ def extract_cheque(img: np.ndarray, engine: BaseEngine, micr_model: MicrModel | 
             fields[k]["issues"].append("MICR model not trained – run scripts/train_micr.py.")
 
     if engine.available:
-        header_lines = engine.read(_prep(_crop(work, "header")), "block")
+        header_img = _prep(_crop(work, "header"))
+        header_img = cv2.resize(header_img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        header_lines = engine.read(header_img, "block")
         header_text = "\n".join(l.text for l in header_lines)
         page_lines = engine.read(cv2.cvtColor(work, cv2.COLOR_BGR2GRAY), "page")
         page_text = "\n".join(l.text for l in page_lines)
         raw_parts.append(page_text)
 
-        ifsc = _find_ifsc(header_text) or _find_ifsc(page_text)
+        ifsc, iconf, iraw = _find_ifsc_conf(header_lines) or _find_ifsc_conf(page_lines) or ("", 0.0, "")
         if ifsc:
-            fields["ifsc_code"] = _field(ifsc, 0.9, "header")
+            issues = []
+            raw_compact = re.sub(r"[^A-Z0-9]", "", iraw.upper())
+            if raw_compact != ifsc:
+                issues.append(f"OCR read '{iraw}'; characters were corrected to fit the IFSC format – confirm visually.")
+            fields["ifsc_code"] = _field(ifsc, iconf, "header", iraw, issues)
         bank, bconf, bsrc = _detect_bank(header_text + "\n" + page_text, ifsc)
         if bank:
             fields["bank_name"] = _field(bank, bconf, bsrc)
-        branch, brconf = _find_branch(header_lines, bank)
+        # block mode can merge/lose small address lines; sparse mode finds them reliably
+        branch, brconf = _find_branch(header_lines + engine.read(header_img, "sparse"), bank)
         if branch:
             fields["branch_name"] = _field(branch, min(brconf, 0.8), "header",
                                            issues=["Branch text is heuristic – confirm visually."])
@@ -432,6 +468,9 @@ def extract_cheque(img: np.ndarray, engine: BaseEngine, micr_model: MicrModel | 
     # cross-field consistency lowers confidence where amounts disagree
     validation = _validate(fields, today)
     for c in validation["checks"]:
+        if c["check"] in ("ifsc_bank_match", "ifsc_format") and c["status"] != "pass" and fields["ifsc_code"]["value"]:
+            fields["ifsc_code"]["status"] = "review"
+            fields["ifsc_code"]["issues"].append(c["message"])
         if c["check"] == "amount_consistency" and c["status"] == "fail":
             for k in ("amount_figures", "amount_words"):
                 if fields[k]["value"]:
