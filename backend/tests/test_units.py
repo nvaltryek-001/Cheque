@@ -156,3 +156,44 @@ def test_validation_checks():
     assert checks["amount_consistency"] == "pass" and checks["completeness"] == "warn"
     fields["amount_words"] = _field("Two Lakh", 0.9)
     assert {c["check"]: c["status"] for c in _validate(fields)["checks"]}["amount_consistency"] == "fail"
+
+
+# ------------------------------------------------------------ alteration check
+def _with_extra_stroke(img):
+    out = img.copy()
+    cv2.line(out, (60, 20), (200, 80), (40, 40, 40), 2)
+    return out
+
+
+def test_alteration_check_flags_added_stroke():
+    from app.signature.alteration import check
+    a = synthetic_signature(1)
+    res = check(preprocess(_with_extra_stroke(a)), preprocess(a))
+    assert res.aligned and res.near_copy and res.altered and res.added_frac > 0.01
+
+
+def test_alteration_check_ignores_unrelated_and_identical():
+    from app.signature.alteration import check
+    a = synthetic_signature(1)
+    same = check(preprocess(a), preprocess(a))
+    assert same.near_copy and not same.altered
+    other = check(preprocess(synthetic_signature(9)), preprocess(a))
+    assert not other.altered
+
+
+def test_decide_rejects_edited_copy_and_reviews_exact_copy():
+    a = synthetic_signature(1)
+    ref = preprocess(a)
+    edited = decide(preprocess(_with_extra_stroke(a)), [ref], None)
+    assert edited["decision"] == "MISMATCH" and "alteration" in edited["reasons"][0]
+    exact = decide(preprocess(a), [ref], None)
+    assert exact["decision"] == "REVIEW" and "copy" in exact["reasons"][0]
+    assert "alteration" in exact["per_specimen"][0]
+
+
+def test_alteration_check_skipped_without_full_images():
+    from app.signature.alteration import check
+    from app.signature.preprocess import Processed
+    p = preprocess(synthetic_signature(1))
+    bare = Processed(p.gray, p.mask, p.bbox, p.quality)
+    assert check(bare, p) is None

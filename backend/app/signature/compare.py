@@ -184,7 +184,7 @@ BASELINE_THRESHOLDS = {"match": 0.80, "mismatch": 0.55}
 
 
 def decide(query: Processed, refs: list[Processed], model: FusionModel | None,
-           thresholds: dict | None = None) -> dict:
+           thresholds: dict | None = None, check_alterations: bool = True) -> dict:
     """Compare a query against all active reference specimens and return MATCH / REVIEW / MISMATCH."""
     reasons: list[str] = []
     if not refs:
@@ -216,6 +216,31 @@ def decide(query: Processed, refs: list[Processed], model: FusionModel | None,
         decision = "REVIEW"
         reasons.append(f"Similarity {score:.2f} is between thresholds "
                        f"({th['mismatch']:.2f}–{th['match']:.2f}); manual review required.")
+    # Copy-and-alter check against every specimen (global similarity cannot see small edits).
+    alterations = []
+    if check_alterations:
+        from .alteration import DEFAULTS as ALT, check as alteration_check
+        for p, ref in zip(per, refs):
+            a = alteration_check(query, ref)
+            if a is not None:
+                p["alteration"] = a.as_dict()
+                alterations.append((p, a))
+    altered = [(p, a) for p, a in alterations if a.altered]
+    exact = [(p, a) for p, a in alterations if a.near_copy and not a.altered
+             and a.agreement >= ALT["exact_copy_agreement"]] if check_alterations else []
+    if altered:
+        p, a = max(altered, key=lambda pa: max(pa[1].added_frac, pa[1].removed_frac))
+        decision = "MISMATCH"
+        reasons.insert(0, f"Local alteration detected: the signature is a near-identical copy of enrolled specimen "
+                          f"#{p['index'] + 1} with ink added ({a.added_frac:.1%}) or removed ({a.removed_frac:.1%}) "
+                          f"in {a.regions} region(s).")
+    elif exact:
+        p, a = exact[0]
+        if decision == "MATCH":
+            decision = "REVIEW"
+        reasons.insert(0, f"The signature is a near pixel-identical copy of enrolled specimen #{p['index'] + 1} "
+                          f"(ink agreement {a.agreement:.1%}). Genuine signatures always vary slightly – check whether "
+                          "this is a photocopy/pasted image, or whether the specimen was taken from this cheque.")
     if not q_ok:
         reasons.append("Query image quality is poor: " + "; ".join(i["message"] for i in query.quality.get("issues", [])))
         if decision == "MATCH":

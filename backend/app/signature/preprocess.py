@@ -34,6 +34,10 @@ class Processed:
     mask: np.ndarray          # CANVAS_H x CANVAS_W uint8, 255 = ink
     bbox: tuple[int, int, int, int]  # crop box in the source image (x, y, w, h)
     quality: dict = field(default_factory=dict)
+    # full background-normalised image + ink mask before cropping/resizing; used for
+    # alignment-based alteration checks (absent when Processed is built by hand)
+    full_gray: np.ndarray | None = None
+    full_mask: np.ndarray | None = None
 
 
 class SignatureError(ValueError):
@@ -134,7 +138,7 @@ def preprocess(img: np.ndarray, config: dict | None = None) -> Processed:
         "crop_size": [cw, ch], "ink_fraction": round(ink_frac_src, 4), "components": int(n_comp),
         "contrast": round(contrast, 1), "sharpness": round(sharp, 1),
     }
-    return Processed(canvas_g, canvas_m, (x0, y0, cw, ch), quality)
+    return Processed(canvas_g, canvas_m, (x0, y0, cw, ch), quality, norm, mask)
 
 
 def perceptual_hash(processed: Processed) -> str:

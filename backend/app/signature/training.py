@@ -224,6 +224,54 @@ def _r(x):
     return round(x, 4) if x is not None else None
 
 
+def evaluate_decisions(manifests: dict, split: str, model: FusionModel, cfg: dict) -> dict:
+    """End-to-end MATCH/REVIEW/MISMATCH decisions, including the alteration check, for:
+    recaptured genuine (simulated positive), synthetic forgery submitted as-is, re-captured synthetic
+    forgery, and re-captured other-signer signature. Same seeds as build_pairs."""
+    from .compare import decide
+    rng = random.Random(f'{cfg["seed"]}-decisions-{split}')
+    genuine = [r for r in manifests["genuine"] if r["split_norm"] == split]
+    altered = defaultdict(list)
+    for r in manifests["altered"]:
+        if r["split_norm"] == split:
+            altered[r["target_signer_id"]].append(r)
+    out = defaultdict(Counter)
+    for g in genuine:
+        ref_img = cv2.imread(str(g["path"]), cv2.IMREAD_COLOR)
+        if ref_img is None:
+            continue
+        ref = preprocess(ref_img)
+        queries = [("genuine_recaptured", recapture(ref_img, rng)) for _ in range(cfg["positives_per_signer"])]
+        for a in altered.get(g["signer_id"], []):
+            img = cv2.imread(str(a["path"]), cv2.IMREAD_COLOR)
+            if img is not None:
+                queries += [("forgery_as_is", img), ("forgery_recaptured", recapture(img, rng))]
+        others = [x for x in genuine if x["signer_id"] != g["signer_id"]]
+        for o in rng.sample(others, min(cfg["impostors_per_signer"], len(others))):
+            img = cv2.imread(str(o["path"]), cv2.IMREAD_COLOR)
+            if img is not None:
+                queries.append(("other_signer_recaptured", recapture(img, rng)))
+        for kind, img in queries:
+            try:
+                out[kind][decide(preprocess(img), [ref], model)["decision"]] += 1
+            except SignatureError:
+                out[kind]["ERROR"] += 1
+    res = {k: dict(v) for k, v in out.items()}
+    pos = out["genuine_recaptured"]
+    neg = Counter()
+    for k in ("forgery_as_is", "forgery_recaptured", "other_signer_recaptured"):
+        neg.update(out[k])
+    total_neg = sum(neg.values())
+    res["summary"] = {
+        "false_accept_rate_MATCH_on_negatives": round(neg["MATCH"] / total_neg, 4) if total_neg else None,
+        "forgery_as_is_accepted": f'{out["forgery_as_is"]["MATCH"]}/{sum(out["forgery_as_is"].values())}',
+        "forgery_as_is_rejected": f'{out["forgery_as_is"]["MISMATCH"]}/{sum(out["forgery_as_is"].values())}',
+        "genuine_recaptured_MATCH": f'{pos["MATCH"]}/{sum(pos.values())}',
+        "genuine_recaptured_MISMATCH": f'{pos["MISMATCH"]}/{sum(pos.values())}',
+    }
+    return res
+
+
 def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) -> tuple[FusionModel, dict]:
     cfg = {**PAIR_CONFIG, **(cfg or {})}
     pairs = {}
@@ -274,6 +322,7 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
         "val": summarize(sc["val"], lb["val"], kd["val"], model.thresholds),
         "test": summarize(sc["test"], lb["test"], kd["test"], model.thresholds) if pairs["test"] else None,
         "signers_per_split": {s: len({p["signer"] for p in pairs[s]}) for s in pairs},
+        "decisions_with_alteration_check": {},
         "leakage_check": {
             "train_val_overlap": len({p["signer"] for p in pairs["train"]} & {p["signer"] for p in pairs["val"]}),
             "train_test_overlap": len({p["signer"] for p in pairs["train"]} & {p["signer"] for p in pairs["test"]}),
@@ -287,4 +336,15 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
             "Small test set (20 signers): metrics carry wide uncertainty.",
         ],
     }
+    for split in ("val", "test"):
+        if progress:
+            progress(f"evaluating decisions with alteration check on {split}")
+        report["decisions_with_alteration_check"][split] = evaluate_decisions(manifests, split, model, cfg)
+    report["limitations"].append(
+        "About 10% of the synthetic forgeries (25/240) differ from their genuine image only by JPEG noise – the "
+        "random edit landed on blank paper – so no method can distinguish them; they count against detection.")
+    report["limitations"].append(
+        "Genuine positives are re-captures of the same image, so they are near-identical copies and the copy "
+        "check routes them to REVIEW. Real genuine signatures (a new signing) would not be pixel copies; this "
+        "behaviour could not be evaluated on this dataset.")
     return model, report

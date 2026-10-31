@@ -35,8 +35,8 @@
     "mismatch": 0.5394
   },
   "meta": {
-    "version": "fusion-lr-20261031063650-ef4c7123",
-    "trained_at": "2026-10-31T06:36:50+00:00",
+    "version": "fusion-lr-20261031161455-ef4c7123",
+    "trained_at": "2026-10-31T16:14:55+00:00",
     "config": {
       "positives_per_signer": 3,
       "impostors_per_signer": 3,
