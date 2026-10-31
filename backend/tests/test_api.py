@@ -1,6 +1,7 @@
 """API tests: startup, auth/authorization, CRUD, uploads, validation, reports."""
 import io
 
+import cv2
 import numpy as np
 import pytest
 
@@ -343,3 +344,18 @@ def test_verify_from_cheque_with_form_fields_only(client, admin, operator):
     assert r.json["data"]["cheque_id"] == cid
     r = client.post("/api/verifications", headers=operator, json={"signer_id": sid, "cheque_id": cid})
     assert r.status_code == 201
+
+
+def test_pdf_report_survives_markup_in_corrections(client, admin, operator):
+    """Regression: a correction containing ReportLab markup used to crash PDF generation (500)."""
+    # any decodable image is a valid cheque upload; OCR may find little on it
+    big = np.full((470, 1024, 3), 245, np.uint8)
+    big[300:400, 700:1020] = cv2.resize(synthetic_signature(5), (320, 100))
+    cid = client.post("/api/cheques", headers=operator, data=upload(png_bytes(big), "c.png"),
+                      content_type="multipart/form-data").json["data"]["id"]
+    nasty = '<b>unclosed <font color=red>x & y </para> <a href="javascript:1">z'
+    r = client.patch(f"/api/cheques/{cid}", headers=operator, json={"corrections": {"payee_name": nasty},
+                                                                     "notes": "<i>note"})
+    assert r.status_code == 200
+    pdf = client.get(f"/api/cheques/{cid}/report.pdf", headers=operator)
+    assert pdf.status_code == 200 and pdf.data[:4] == b"%PDF"
