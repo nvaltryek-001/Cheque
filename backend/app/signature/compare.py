@@ -33,7 +33,10 @@ try:
     _SIFT = cv2.SIFT_create(nfeatures=400)
 except AttributeError:  # pragma: no cover - very old OpenCV
     _SIFT = None
-_HOG = cv2.HOGDescriptor((CANVAS_W, CANVAS_H), (32, 32), (16, 16), (16, 16), 9)
+try:
+    _HOG = cv2.HOGDescriptor((CANVAS_W, CANVAS_H), (32, 32), (16, 16), (16, 16), 9)
+except AttributeError:  # OpenCV builds without objdetect HOG (e.g. some 5.x wheels)
+    _HOG = None
 
 
 def _ratio_matches(d1, d2, norm, ratio=0.78) -> int:
@@ -82,6 +85,8 @@ def _ssim(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _hog(a: np.ndarray, b: np.ndarray) -> float:
+    if _HOG is None:
+        return float("nan")  # treated as "no evidence" by the fusion model
     ha = _HOG.compute(255 - a).ravel()
     hb = _HOG.compute(255 - b).ravel()
     denom = np.linalg.norm(ha) * np.linalg.norm(hb)
