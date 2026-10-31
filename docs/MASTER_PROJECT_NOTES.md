@@ -63,7 +63,9 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
 ### Measured results (details: `reports/final/MODEL_EVALUATION.md`)
 | Measure | Result |
 |---|---|
-| OCR, 20 test cheques, hand-transcribed by Claude (not yet human-verified) | 182/200 fields; wrong values marked "ok": 2 of 18 |
+| OCR, 20 test cheques, hand-transcribed by Claude (not yet human-verified; 1 label corrected 2026-10-31) | 183/200 fields; 8/20 cheques fully correct; wrong values marked "ok": 2 of 17 |
+| Genuine signature acceptance / false rejection | **not measurable** – the only genuine image per signer is cropped from that signer's cheque (`DATASET_VALIDATION_REPORT.md`) |
+| Random impostor (other signer's cheque signature), test | accepted 0/380 |
 | Cheque number / MICR code / bank name | 20/20 each |
 | Synthetic forgery submitted as-is (test signers) | accepted 2/40, rejected 21/40, review 17/40 |
 | Other-signer signature (test) | accepted 0/60 |
@@ -86,13 +88,15 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
 | 11 | Human verification of the 40 OCR labels | BLOCKED | needs a person; labels delivered privately |
 | 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection |
 | 13 | Dataset tests in CI | BLOCKED | datasets are private; needs private runner or synthetic fixtures |
+| 15 | Dataset validation (OCR test set + signature dataset) | COMPLETED | `reports/final/DATASET_VALIDATION_REPORT.md`; awaiting owner review before push |
 | 14 | Render deployment | NOT STARTED | needs owner approval and a paid plan for the disk |
 
 ## 9. Known bugs / limitations
 - 2 of 18 wrong OCR values on the test set are still marked "ok" (ICICI payee mid-word mis-reads).
 - Canara branch name not extracted on the test cheques; ICICI boxed dates sometimes missing.
-- Signature "genuine" pairs in the dataset are copies of one image, so genuine verification mostly ends
-  in REVIEW; behaviour on real, independently signed genuine signatures is unverified.
+- The signature dataset has no independent genuine sample (each specimen is cropped from its signer's only
+  cheque) and no skilled forgeries; ~2/3 of specimens appear to be typeset names. Behaviour on real,
+  independently signed genuine signatures and on skilled forgeries is unknown.
 - 10 % of synthetic forgeries are visually identical to the genuine image (undetectable by design).
 - Waitress not tested in the build environment (falls back to Flask's threaded server if missing).
 - After sign-out/in the UI stays on the last page.
@@ -109,3 +113,4 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-10-31 | CI fixes: dataset-test skips, OpenCV pin |
 | 2026-10-31 | Production readiness audit (`reports/final/PRODUCTION_READINESS_AUDIT.md`) |
 | 2026-10-31 | Blocker fixes: OpenCV golden tests, PDF escaping, OCR row extent/IFSC/branch, signature alteration check, Docker /data persistence, ProxyFix, umask |
+| 2026-10-31 | Dataset validation report; genuine-signature figures withdrawn as GAR; OCR test label corrected (183/200) |

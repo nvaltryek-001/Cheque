@@ -5,6 +5,11 @@
 > synthetic forgeries submitted *as is* were all accepted; section 3b reports decisions with the new
 > alteration check. Section 2's "fill rate" figures measure presence, not correctness – section 2b
 > measures correctness against hand-transcribed labels.
+>
+> **Update 2026-10-31 (dataset validation, `DATASET_VALIDATION_REPORT.md`).** Each genuine signature image
+> was cropped from that signer's only cheque, so the "genuine re-capture" rows below are the enrolled image
+> itself and are **not** a genuine acceptance rate; GAR/FRR cannot be measured with this dataset. One OCR test
+> label was found wrong and corrected, so test OCR is 183/200 (not 182/200).
 
 All numbers below were produced by `python manage.py train-micr`, `train-signature` and
 `eval-ocr --split {train,val,test}` on 2026-10-31 and are stored next to this file as JSON.
