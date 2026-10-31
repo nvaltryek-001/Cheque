@@ -121,9 +121,9 @@ Siamese training is **blocked**. See `docs/SIGNATURE_DATASET.md`.
 | Component | What was trained | Test result |
 |---|---|---|
 | MICR E-13B reader | 480 glyph templates from 80 train cheques (labels = filename cheque number) | Cheque number exact match **20 of 20** test cheques (19/19 val). 95 % lower confidence bound ≈ 83 %. |
-| Field extraction (Tesseract 5.3.4) | Rules + region isolation; developed on train/val, test run once | Account number found in signature registry 18/20 · amount words = figures 17/20 · valid date 19/20 · all 10 fields filled except branch 85 %, account 90 %, date 95 % |
+| Field extraction (Tesseract 5.3.4) | Rules + region isolation; developed on train/val | Against hand-transcribed labels for the 20 test cheques (transcribed by Claude, not yet human-verified): **182/200 fields correct**; bank, cheque no., MICR 20/20; payee 17/20; branch 14/20; 16 of 18 wrong values are flagged for review |
 | Handwritten OCR | — | **Blocked**: no handwritten fields, no transcriptions |
-| Signature fusion (logistic regression over 8 similarity features) | Train pairs only; thresholds on validation | ROC-AUC 0.864, EER 0.232. Different-signer pairs: AUC 0.998, 0/60 accepted. Synthetic alterations: AUC 0.66 – weak. At the validated match threshold: FAR 1 %, FRR 78 % (most genuine pairs go to REVIEW, by design) |
+| Signature fusion (logistic regression over 8 similarity features) + alteration check | Fusion on train pairs, thresholds on validation, alteration thresholds on train | Different signer: 0/60 accepted. Synthetic forgery submitted as-is: **2/40 accepted**, 21/40 rejected, 17/40 review (before the alteration check every as-is forgery was accepted). MATCH on any negative 1.4 %. Simulated genuine re-captures mostly go to REVIEW (45/60) |
 | Signer-specific / Siamese | — | **Blocked**: needs several real specimens per signer |
 
 Full numbers, protocol and caveats: `reports/final/MODEL_EVALUATION.md`.
@@ -231,9 +231,11 @@ identity provider/MFA, encrypted storage, retention policies and an independent 
 - Fields on these cheques are typed; real handwritten cheques will perform worse with Tesseract.
 - Test cheques share templates with training cheques, so results on unseen layouts will be lower.
 - Signature verification: one specimen per signer, synthetic alterations only, simulated positive pairs,
-  20 test signers. Detection of small stroke alterations is weak (AUC ≈ 0.66).
+  20 test signers. An alignment-based check rejects most edited copies, but ~10 % of the synthetic
+  forgeries contain no visible edit and cannot be detected; behaviour on real, independently signed
+  genuine signatures and on skilled forgeries is untested.
 - In this dataset the enrolled specimens were cropped from the same cheque scans, so verifying those
-  cheques against them is not an independent test (it will usually say MATCH).
+  cheques against them is not an independent test (the copy check sends these to REVIEW as near-identical copies).
 - PaddleOCR adapter follows the documented 3.x API but was not executed in the build environment.
 
 ## 13. Future scope
@@ -256,4 +258,4 @@ recognition; layout detection for unseen templates; MFA/SSO; encrypted object st
 
 ## 15. Status
 
-See `reports/final/FINAL_PROJECT_COMPLETION_REPORT.md` for what was built, tested and what remains.
+Current task status and known issues: `docs/MASTER_PROJECT_NOTES.md`. Audit: `reports/final/PRODUCTION_READINESS_AUDIT.md`.

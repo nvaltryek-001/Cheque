@@ -1,5 +1,11 @@
 # Model evaluation
 
+> **Update 2026-10-31 (after the production readiness audit).** Sections 2b and 3b were added. The audit
+> showed that the earlier signature results (section 3) re-captured every query, which hid the fact that
+> synthetic forgeries submitted *as is* were all accepted; section 3b reports decisions with the new
+> alteration check. Section 2's "fill rate" figures measure presence, not correctness – section 2b
+> measures correctness against hand-transcribed labels.
+
 All numbers below were produced by `python manage.py train-micr`, `train-signature` and
 `eval-ocr --split {train,val,test}` on 2026-10-31 and are stored next to this file as JSON.
 Small test sets → wide uncertainty; no figure here should be read as a production accuracy.
@@ -36,6 +42,32 @@ Not measurable without labels: payee name CER/WER, amount-in-words WER, date exa
 accuracy. "Valid date" and "consistent amounts" show plausibility, not correctness.
 Handwritten-field CER/WER: not applicable (no handwritten fields, no transcriptions).
 PaddleOCR baseline comparison: not run (PaddleOCR could not be installed in the build environment).
+
+## 2b. Field accuracy against hand-transcribed labels
+Labels for the 20 validation and 20 test cheques were transcribed by Claude from the images before
+looking at any prediction (not yet verified by a person; kept outside the repository because they
+contain account numbers). Fixes were developed on validation; test was scored before the fixes (during
+the audit) and once after.
+
+| Field | val before | val after | test before | test after |
+|---|---|---|---|---|
+| Bank name | 20/20 | 20/20 | 20/20 | 20/20 |
+| Branch name | 10/20 | 15/20 | 6/20 | 14/20 |
+| IFSC | 18/20 | 18/20 | 19/20 | 19/20 |
+| Cheque number | 20/20 | 20/20 | 20/20 | 20/20 |
+| MICR code | 20/20 | 20/20 | 20/20 | 20/20 |
+| Account number | 16/20 | 16/20 | 18/20 | 18/20 |
+| Date | 17/20 | 17/20 | 18/20 | 18/20 |
+| Payee name | 19/20 | 20/20 | 14/20 | 17/20 |
+| Amount (figures) | 19/20 | 19/20 | 17/20 | 17/20 |
+| Amount (words, text) | 20/20 | 20/20 | 19/20 | 19/20 |
+| **All fields** | **179/200** | **185/200** | **171/200** | **182/200** |
+| Cheques with all 10 correct | 5/20 | 8/20 | 3/20 | 8/20 |
+| Wrong values flagged review/missing | 18/21 | 15/15 | 23/29 | 16/18 |
+
+Remaining errors on test: Canara branch not found (5), 2 ICICI dates, 3 truncated amounts (all flagged by
+the words-vs-figures check), 2 Syndicate account numbers, 3 payee mis-reads (2 still marked "ok"), and one
+cheque whose printed IFSC is itself invalid. Small sample: treat as indicative only.
 
 ## 3. Signature comparator
 ### Protocol
@@ -84,6 +116,25 @@ Three-way test decisions: positives 13 MATCH / 34 REVIEW / 13 MISMATCH; alterati
 other signers 0 / 0 / 60.
 
 At the test EER threshold (threshold-free summary only, not an operating point): FAR 23 %, FRR 23 %, F1 0.713.
+
+### 3b. Decisions with the alteration check (current behaviour)
+`app/signature/alteration.py` aligns the query to each specimen (ORB + RANSAC, fixed 160 px working
+height) and measures ink present in only one image (grey-level, neighbourhood-tolerant). Edited
+near-copy → MISMATCH; near pixel-identical copy → REVIEW. Thresholds were chosen on train pairs
+(re-captures wrongly flagged 4/160, forgeries caught 86/160 on train). Same seeds as section 3.
+
+| Query vs reference (test signers) | MATCH | REVIEW | MISMATCH |
+|---|---|---|---|
+| Genuine, simulated re-capture (60) | 4 | 45 | 11 |
+| Synthetic forgery submitted as is (40) | **2** | 17 | 21 |
+| Synthetic forgery, re-captured (40) | 0 | 10 | 30 |
+| Other signer, re-captured (60) | 0 | 0 | 60 |
+
+MATCH on any negative: 1.4 % (test), 5.0 % (validation). Live API re-test with all 36 forgeries of the
+18 test signers whose cheques were matched: 1 MATCH, 17 REVIEW, 18 MISMATCH (previously 36 MATCH).
+25 of the 240 synthetic forgeries differ from their genuine image only by JPEG noise and cannot be detected.
+Genuine re-captures go mostly to REVIEW because they are copies of the same image – real genuine
+signatures were not available to evaluate.
 
 ### Reading these results
 - Rejecting a **different person's** signature works well (0 of 60 accepted, AUC ≈ 1.0).

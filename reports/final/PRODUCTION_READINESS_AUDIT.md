@@ -217,3 +217,18 @@ Accuracy figures were measured with OpenCV 5.0 locally; the 4.x build has **not*
 6. Only then merge PR #1 and deploy to Render; repeat §6–§8 against the live URL.
 
 **Recommendation: do not merge or deploy yet.** Merge after blockers 1–5 are resolved and re-tested.
+
+---
+
+## Status update – blocker fixes (2026-10-31, after the audit; commits d451b11…)
+| Blocker | Status | Evidence |
+|---|---|---|
+| 1. Synthetic forgeries accepted | Fixed – COMPLETED | Alteration check; live API 36/36 → 1/36 MATCH; test signers 2/40 accepted (`MODEL_EVALUATION.md` §3b) |
+| 2. Wrong OCR values marked "ok" | Reduced – COMPLETED for truncation | Test: wrong-but-ok 6 → 2; fields 171 → 182/200 (`MODEL_EVALUATION.md` §2b) |
+| 3. PDF crash on markup | Fixed – COMPLETED | Escaping + regression test |
+| 4. Render disk permissions / model persistence | Implemented – TESTING | Entrypoint verified locally as root with a root-owned data dir (privilege drop, seeding, 600 files, 17/17 smoke checks); Docker CI job now runs the same with a root-owned volume and a restart – result pending the next push |
+| 5. OpenCV 4.x vs 5.0 | Test added – TESTING | Golden-value test on synthetic inputs; passes on 5.0; must pass in CI on 4.x |
+| Proxy IPs, file permissions | Fixed – COMPLETED | ProxyFix (`CV_PROXY_HOPS`), umask 077, tests |
+| Admin lockout DoS, CSP/HSTS | NOT STARTED | — |
+
+Merge/deploy recommendation unchanged until blockers 4 and 5 pass in CI and the OCR labels are human-verified.
