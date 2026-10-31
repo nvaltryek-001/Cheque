@@ -15,6 +15,8 @@ services:
         value: /data/instance
       - key: CV_MAX_UPLOAD_MB
         value: "10"
+      - key: CV_PROXY_HOPS       # Render terminates TLS in one proxy: trust one X-Forwarded-For hop
+        value: "1"
     disk:
       name: chequeverify-data
       mountPath: /data

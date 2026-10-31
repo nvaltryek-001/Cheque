@@ -47,6 +47,8 @@ class Config:
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"}
     LOGIN_MAX_ATTEMPTS = _int("CV_LOGIN_MAX_ATTEMPTS", 5)
     LOGIN_LOCK_SECONDS = _int("CV_LOGIN_LOCK_SECONDS", 300)
+    # number of reverse proxies in front of the app (Render: 1). 0 = trust no X-Forwarded-* headers.
+    PROXY_HOPS = _int("CV_PROXY_HOPS", 0)
 
     # --- OCR ---------------------------------------------------------------
     OCR_ENGINE = os.environ.get("CV_OCR_ENGINE", "auto")  # auto | paddle | tesseract | none

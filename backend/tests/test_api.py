@@ -359,3 +359,21 @@ def test_pdf_report_survives_markup_in_corrections(client, admin, operator):
     assert r.status_code == 200
     pdf = client.get(f"/api/cheques/{cid}/report.pdf", headers=operator)
     assert pdf.status_code == 200 and pdf.data[:4] == b"%PDF"
+
+
+def test_client_ip_behind_proxy(tmp_path, monkeypatch):
+    """With CV_PROXY_HOPS=1 (Render) the audit log records the client IP, not the proxy's."""
+    from app import create_app
+    from conftest import MODELS
+    monkeypatch.setenv("CV_ADMIN_PASSWORD", ADMIN_PW)
+    for hops, expected in ((1, "203.0.113.9"), (0, "127.0.0.1")):
+        d = tmp_path / f"h{hops}"
+        a = create_app({"TESTING": True, "INSTANCE_DIR": d, "DATABASE": d / "t.db", "STORAGE_DIR": d / "s",
+                        "MODELS_DIR": MODELS, "REPORTS_DIR": d / "r", "SECRET_KEY": "k", "PROXY_HOPS": hops,
+                        "FRONTEND_DIST": d / "nodist"})
+        c = a.test_client()
+        c.post("/api/auth/login", json={"username": "admin", "password": ADMIN_PW},
+               headers={"X-Forwarded-For": "203.0.113.9"}, environ_base={"REMOTE_ADDR": "127.0.0.1"})
+        h = login(c)
+        rows = c.get("/api/audit-log?action=auth.login", headers=h).json["data"]
+        assert rows[-1]["ip"] == expected

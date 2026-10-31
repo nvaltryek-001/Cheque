@@ -25,6 +25,10 @@ def create_app(overrides: dict | None = None) -> Flask:
         Config.INSTANCE_DIR = app.config["INSTANCE_DIR"]
         app.config["SECRET_KEY"] = Config.resolve_secret()
     app.config["APP_VERSION"] = __version__
+    hops = int(app.config.get("PROXY_HOPS") or 0)
+    if hops > 0:  # real client IP / scheme behind a reverse proxy (audit log, HTTPS detection)
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     init_db(str(app.config["DATABASE"]))

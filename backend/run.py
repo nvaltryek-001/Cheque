@@ -24,6 +24,7 @@ def load_dotenv(path: Path) -> None:
 
 
 def main() -> None:
+    os.umask(0o077)  # database, uploads and specimens readable by this user only
     load_dotenv(Path(__file__).with_name(".env"))
     parser = argparse.ArgumentParser(description="ChequeVerify AI server")
     parser.add_argument("--host", default=os.environ.get("CV_HOST", "127.0.0.1"))
