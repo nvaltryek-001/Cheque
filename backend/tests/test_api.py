@@ -4,7 +4,7 @@ import io
 import numpy as np
 import pytest
 
-from conftest import (ADMIN_PW, SIG_DS, dataset_cheque, login, png_bytes, synthetic_signature, upload)
+from conftest import (ADMIN_PW, HAS_OCR, HAS_SIG, dataset_cheque, login, png_bytes, synthetic_signature, upload)
 
 
 def test_startup_and_health(client):
@@ -251,7 +251,7 @@ def test_preprocess_preview(client, operator):
 
 
 # ------------------------------------------------------------ datasets & models
-@pytest.mark.skipif(not SIG_DS.exists(), reason="signature dataset not available")
+@pytest.mark.skipif(not (HAS_SIG and HAS_OCR), reason="datasets not available")
 def test_dataset_audits_and_readiness(client, admin, operator):
     r = client.get("/api/datasets/signature/audit", headers=operator)
     assert r.status_code == 200 and r.json["data"]["genuine_rows"] == 120
@@ -269,7 +269,7 @@ def test_dataset_image_path_traversal(client, operator):
     assert r.status_code in (400, 404)
 
 
-@pytest.mark.skipif(not SIG_DS.exists(), reason="signature dataset not available")
+@pytest.mark.skipif(not HAS_SIG, reason="signature dataset not available")
 def test_dataset_import_enrollment(client, admin):
     r = client.post("/api/signers/import-dataset", headers=admin, json={"splits": ["test"]})
     assert r.status_code == 200, r.json
@@ -319,7 +319,7 @@ def test_unknown_api_route_json(client):
     assert r.status_code == 404 and r.json["ok"] is False
 
 
-@pytest.mark.skipif(not SIG_DS.exists(), reason="signature dataset not available")
+@pytest.mark.skipif(not HAS_OCR, reason="OCR dataset not available")
 def test_micr_training_job_sync(client, admin, app):
     r = client.post("/api/models/micr/run", headers=admin, json={"synchronous": True})
     assert r.status_code == 202

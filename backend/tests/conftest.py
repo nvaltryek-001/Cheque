@@ -17,6 +17,13 @@ from app import create_app  # noqa: E402
 OCR_DS = Path(os.environ.get("CV_OCR_DATASET", ROOT / "dataset"))
 SIG_DS = Path(os.environ.get("CV_SIGNATURE_DATASET", ROOT / "signature"))
 MODELS = BACKEND / "models_store"
+
+from app.services.datasets import discover_ocr_images, find_signature_root  # noqa: E402
+
+# Datasets are private and not in git: the repo only holds placeholder notes in dataset/ and
+# signature/. Dataset tests run only when the real content is present.
+HAS_SIG = find_signature_root(SIG_DS) is not None
+HAS_OCR = any(i["split"] == "train" for i in discover_ocr_images(OCR_DS))
 ADMIN_PW = "Admin-pass-123"
 
 

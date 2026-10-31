@@ -18,8 +18,17 @@ jobs:
         run: pip install -r backend/requirements.txt
       - name: Run tests
         working-directory: backend
-        run: python -m pytest -q
         # dataset-dependent tests are skipped automatically: datasets are private and not in git
+        run: |
+          set -o pipefail
+          python -m pytest -q -rfE 2>&1 | tee pytest-output.txt
+      - name: Annotate test failures
+        if: failure()
+        working-directory: backend
+        run: |
+          grep -E "^(FAILED|ERROR)|Error:" pytest-output.txt | head -10 | while IFS= read -r line; do
+            echo "::error title=pytest::$line"
+          done
 
   frontend:
     runs-on: ubuntu-latest
