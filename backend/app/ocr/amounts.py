@@ -84,7 +84,7 @@ def number_to_words(n: int) -> str:
 
 
 def parse_figures(text: str) -> int | None:
-    """'₹ 23,50,000/-' -> 2350000. Ignores paise after a decimal point."""
+    """'₹ 18,75,000/-' -> 1875000. Ignores paise after a decimal point."""
     if not text:
         return None
     t = text.replace("O", "0").replace("o", "0").replace("l", "1").replace("I", "1")

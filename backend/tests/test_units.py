@@ -133,23 +133,23 @@ def test_number_words_roundtrip():
 
 
 def test_indian_format_and_figures():
-    assert amounts.format_indian(2350000) == "23,50,000"
-    assert amounts.parse_figures("₹ 1,40,00,000/-") == 14000000
+    assert amounts.format_indian(1875000) == "18,75,000"
+    assert amounts.parse_figures("₹ 2,60,00,000/-") == 26000000
     assert amounts.parse_figures("") is None
 
 
 def test_rupee_symbol_misread_is_corrected_by_words():
-    assert _parse_figures_tokens("23,85,000/-", 385000)[0] == 385000
-    assert _parse_figures_tokens("329,000/-", 329000)[0] == 329000
-    assert _parse_figures_tokens("1,40,00,000/-", None)[0] == 14000000
+    assert _parse_figures_tokens("24,15,000/-", 415000)[0] == 415000
+    assert _parse_figures_tokens("471,000/-", 471000)[0] == 471000
+    assert _parse_figures_tokens("2,60,00,000/-", None)[0] == 26000000
 
 
 def test_validation_checks():
     fields = {k: _field() for k in FIELD_ORDER}
     fields["ifsc_code"] = _field("UTIB0000426", 0.9)
     fields["bank_name"] = _field("Axis Bank", 0.9)
-    fields["amount_figures"] = _field("23,50,000/-", 0.9)
-    fields["amount_words"] = _field("Twenty Three Lakh Fifty Thousand", 0.9)
+    fields["amount_figures"] = _field("18,75,000/-", 0.9)
+    fields["amount_words"] = _field("Eighteen Lakh Seventy Five Thousand", 0.9)
     v = _validate(fields)
     checks = {c["check"]: c["status"] for c in v["checks"]}
     assert checks["ifsc_format"] == "pass" and checks["ifsc_bank_match"] == "pass"

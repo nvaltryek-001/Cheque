@@ -14,10 +14,10 @@ HAS_TESSERACT = shutil.which("tesseract") is not None
 
 # ---------------------------------------------------------------- amount in figures
 @pytest.mark.parametrize("text,words,expected", [
-    ("1, 50, 000 in", None, 150000),          # spaces inside the digit grouping
-    ("Tat zg 21,05, 000", 2105000, 2105000),
-    ("“% 28.34,000/-", None, 2834000),         # comma read as a dot
-    ("= 1,20,000/-", None, 120000),
+    ("1, 75, 000 in", None, 175000),          # spaces inside the digit grouping
+    ("Tat zg 31,45, 000", 3145000, 3145000),
+    ("“% 38.64,000/-", None, 3864000),         # comma read as a dot
+    ("= 1,35,000/-", None, 135000),
 ])
 def test_figures_normalisation(text, words, expected):
     value, _ = F._parse_figures_tokens(text, words)
@@ -27,10 +27,10 @@ def test_figures_normalisation(text, words, expected):
 def test_figures_tail_of_words_line_is_not_the_amount():
     # "... Forty Only" sits in the figures region on some layouts; it must not beat the real box
     v1, _ = F._parse_figures_tokens("1 Forty Only", None)
-    v2, _ = F._parse_figures_tokens("z= 26,740/-", None)
-    assert v1 == 1 and v2 == 26740
+    v2, _ = F._parse_figures_tokens("z= 36,820/-", None)
+    assert v1 == 1 and v2 == 36820
     best = max([(v1, 0.81), (v2, 0.12)], key=lambda c: (c[0] >= 100, c[1]))
-    assert best[0] == 26740
+    assert best[0] == 36820
 
 
 # ---------------------------------------------------------------- account number
