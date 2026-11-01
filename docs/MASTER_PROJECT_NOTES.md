@@ -84,7 +84,7 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
 | 7 | Private file permissions | COMPLETED | umask 077 → 600 files (verified) |
 | 8 | Admin lockout by anyone (5 wrong passwords) | NOT STARTED | per-IP throttling in `services/auth.py` |
 | 9 | CSP / HSTS headers | NOT STARTED | `app/__init__.py` |
-| 10 | Canara branch, ICICI dates, Syndicate account extraction | NOT STARTED | `ocr/fields.py`, `ocr/regions.py` |
+| 10 | Canara branch, ICICI dates, Syndicate account extraction; payee marked ok | TESTING | Phase 1 (2026-10-31): fixed on val/train/test; test 196/200, 0 wrong-but-ok (test set not blind – see §9). Needs fresh human-verified cheques |
 | 11 | Human verification of the 40 OCR labels | BLOCKED | needs a person; labels delivered privately |
 | 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection |
 | 13 | Dataset tests in CI | BLOCKED | datasets are private; needs private runner or synthetic fixtures |
@@ -114,3 +114,4 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-10-31 | Production readiness audit (`reports/final/PRODUCTION_READINESS_AUDIT.md`) |
 | 2026-10-31 | Blocker fixes: OpenCV golden tests, PDF escaping, OCR row extent/IFSC/branch, signature alteration check, Docker /data persistence, ProxyFix, umask |
 | 2026-10-31 | Dataset validation report; genuine-signature figures withdrawn as GAR; OCR test label corrected (183/200) |
+| 2026-10-31 | Phase 1 OCR: digit-pass account read, 3-rendering payee vote, amount-box re-read, boxed-date families, per-line header reads, IFSC prefix repair, spelling-normalisation flag; `score-ocr` command |

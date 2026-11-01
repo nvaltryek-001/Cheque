@@ -35,3 +35,18 @@ transcriptions for PaddleOCR recognition (`rec_gt` line labels) or detection (po
 Every correction saved in the cheque review screen keeps the machine value and the human value side by side.
 Export `cheques.csv` from Reports to obtain confirmed field values; for handwriting, collect real handwritten
 cheques, crop each field line and record its transcription (≥ 2,000 lines across banks, split by cheque).
+
+## Scoring against human-verified labels
+`python manage.py score-ocr --images DIR --labels labels.csv [--private-csv out.csv] [--masked-report out.md]`
+
+`labels.csv` columns: `file` (path relative to `DIR`), `bank_name`, `branch_name`, `ifsc_code`, `cheque_number`,
+`micr_code`, `account_number`, `date` (ISO), `payee_name`, `amount_value` (integer rupees), `amount_words`.
+Keep the file and `--private-csv` output **outside the repository** (they contain account numbers and names);
+`--masked-report` holds only ✓/✗, confidence and review status and is safe to commit. Rules: `app/ocr/scoring.py`.
+The command reports field accuracy and cheque accuracy separately, wrong values marked "ok" (the dangerous
+case), wrong values caught by review, and correct values sent to review (reviewer workload).
+
+**Use labels a person has verified, and cheques that were not used while tuning the extraction rules.** The
+20 test cheques were scored five times while the Phase 1 fixes were written and their failure types had
+already been seen, so their numbers are not a blind estimate; a fresh set of 50–100 labelled cheques is needed
+for a real accuracy claim.

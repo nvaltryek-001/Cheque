@@ -4,6 +4,8 @@
     python manage.py train-micr               # learn MICR templates (train split) + evaluate on val/test
     python manage.py train-signature          # train fusion (train), thresholds (val), evaluate once (test)
     python manage.py eval-ocr --split test    # OCR field evaluation on a split
+    python manage.py score-ocr --images DIR --labels CSV [--private-csv OUT] [--masked-report OUT.md]
+                                              # score against human-verified labels kept outside git
     python manage.py create-user NAME --role operator
     python manage.py reset-password NAME
 All dataset access is read-only.
@@ -106,6 +108,24 @@ def cmd_eval_ocr(args) -> None:
     print(json.dumps(summary, indent=2))
 
 
+def cmd_score_ocr(args) -> None:
+    from app.ocr import scoring
+    from app.ocr.engine import get_engine
+    from app.ocr.micr import MicrModel
+    engine = get_engine(Config.OCR_ENGINE, Config.TESSERACT_CMD)
+    if not engine.available:
+        sys.exit("No OCR engine available (install PaddleOCR or Tesseract).")
+    rows = scoring.score_directory(args.images, args.labels, engine, MicrModel.load(MODELS / "micr_e13b.npz"))
+    summary = scoring.summarise(rows)
+    print(json.dumps(summary, indent=2))
+    if args.private_csv:
+        scoring.full_table_csv(rows, args.private_csv)
+        print(f"private table (real + predicted values – do NOT commit): {args.private_csv}")
+    if args.masked_report:
+        Path(args.masked_report).write_text(scoring.masked_table(rows), encoding="utf-8")
+        print(f"masked table (no values): {args.masked_report}")
+
+
 def _db():
     from app import create_app
     return create_app()
@@ -146,6 +166,12 @@ def main() -> None:
     e = sub.add_parser("eval-ocr")
     e.add_argument("--split", default="test", choices=["train", "val", "test"])
     e.set_defaults(fn=cmd_eval_ocr)
+    sc = sub.add_parser("score-ocr", help="score OCR against a labels CSV (human-verified, kept outside git)")
+    sc.add_argument("--images", required=True, help="directory the CSV's 'file' column is relative to")
+    sc.add_argument("--labels", required=True, help="labels CSV (see app/ocr/scoring.py for the columns)")
+    sc.add_argument("--private-csv", help="write the full table with real values (private)")
+    sc.add_argument("--masked-report", help="write a markdown table with no values (safe for a repository)")
+    sc.set_defaults(fn=cmd_score_ocr)
     c = sub.add_parser("create-user")
     c.add_argument("username")
     c.add_argument("--role", default="operator")

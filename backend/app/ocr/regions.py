@@ -45,7 +45,10 @@ def remove_lines(ink: np.ndarray, min_len: int) -> np.ndarray:
     return out
 
 
-def text_rows(region: np.ndarray, min_ratio: float = 0.65, line_len_factor: float = 1.15) -> list[Row]:
+def text_rows(region: np.ndarray, min_ratio: float = 0.65, line_len_factor: float = 1.15,
+              drop_bars: bool = False) -> list[Row]:
+    """drop_bars: also drop hair-thin vertical bars (box separators of digit fields such as the
+    date), which otherwise survive as character-height strokes and are read as '1'."""
     if region is None or region.size == 0:
         return []
     ink = binarize(region)
@@ -70,6 +73,13 @@ def text_rows(region: np.ndarray, min_ratio: float = 0.65, line_len_factor: floa
     clean = remove_lines(ink, max(10, int(ref * line_len_factor)))
     n, labels, stats, _ = cv2.connectedComponentsWithStats(clean, connectivity=8)
     comps = [(i, *stats[i]) for i in range(1, n) if stats[i][4] >= 10]
+    if drop_bars:
+        thin = max(2, 0.07 * ref)  # glyph strokes are thicker than this; scanned box lines are not
+        comps = [c for c in comps
+                 if not (c[3] <= thin and c[4] >= 0.15 * ref)      # vertical separator (or broken piece)
+                 and not (c[4] <= thin and c[3] >= 0.3 * ref)      # horizontal box-line piece
+                 and not (c[4] < 0.45 * ref and c[3] > 0.8 * ref)  # flat piece of a box top/bottom
+                 and not (c[3] >= 0.6 * ref and c[5] < 0.15 * c[3] * c[4])]  # sparse box corner
     big = [c for c in comps if min_ratio * ref <= c[4] <= 1.6 * ref and c[3] <= 3.5 * ref]
     if not big:
         return []
@@ -170,6 +180,10 @@ def boxed_digits(region: np.ndarray) -> np.ndarray | None:
     if cols.size == 0:
         return None
     x0, x1 = int(cols.min()), int(cols.max()) + 1
+    # Scanned box borders often fade before the last box ends, clipping the final digit.
+    # A CTS date strip has 8 boxes: allow half a box of slack on both sides.
+    slack = int((x1 - x0) / 7.5 / 2)
+    x0, x1 = max(0, x0 - slack), min(W, x1 + slack)
     inner = ink[y0:y1, x0:x1].copy()
     ih = inner.shape[0]
     if ih < 8:

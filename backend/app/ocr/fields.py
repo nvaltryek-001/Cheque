@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import Counter
 from datetime import date, datetime
 
 import cv2
@@ -22,7 +23,7 @@ import numpy as np
 from . import amounts
 from .engine import BaseEngine, Line
 from .micr import MicrModel, read_micr
-from .regions import boxed_digits, digit_canvas, text_rows
+from .regions import binarize, boxed_digits, digit_canvas, text_rows
 
 FIELD_ORDER = ["bank_name", "branch_name", "ifsc_code", "cheque_number", "micr_code",
                "account_number", "date", "payee_name", "amount_figures", "amount_words"]
@@ -178,7 +179,8 @@ def _find_branch(lines: list[Line], bank: str) -> tuple[str, float]:
     best, best_score, conf = "", 0, 0.0
     bank_words = set(bank.upper().split()) if bank else set()
     for ln in lines:
-        ws = [w for w in ln.words if w[1] >= 0.5 and re.search(r"[A-Za-z0-9]{2,}", w[0])] if ln.words else []
+        ws = [w for w in ln.words if (w[1] >= 0.5 and re.search(r"[A-Za-z0-9]{2,}", w[0])) or w[0] in ("-", "–")] if ln.words else []
+        ws = [w for j, w in enumerate(ws) if w[0] not in ("-", "–") or 0 < j < len(ws) - 1]
         bank_tokens = {b.replace(" ", "").upper() for _, b, _ in BANKS} | {k.upper() for k, _, _ in BANKS} | {"BANK", "LTD"}
         while ws and re.sub(r"[^A-Za-z]", "", ws[0][0]).upper() in bank_tokens:
             ws = ws[1:]
@@ -205,6 +207,8 @@ def _find_branch(lines: list[Line], bank: str) -> tuple[str, float]:
             score += 2
         if "," in t or " - " in t:
             score += 1
+        if ws and np.mean([w[1] for w in ws if w[0] not in ("-", "–")] or [0]) >= 0.85:
+            score += 1  # cleanly read line; misread Devanagari/logo text is low-confidence
         if bank_words and set(up.split()) & bank_words and "BRANCH" not in up:
             score -= 3
         if score > best_score:
@@ -212,27 +216,207 @@ def _find_branch(lines: list[Line], bank: str) -> tuple[str, float]:
     return best.strip(" ,.-"), conf if best_score >= 2 else conf * 0.6
 
 
+def _name_key(s: str) -> str:
+    return re.sub(r"[^A-Z]", "", (s or "").upper())
+
+
+def _read_payee(region: np.ndarray, engine: BaseEngine):
+    """Read the payee line from three renderings and vote.
+
+    A name has no checksum, so a confident mis-read ('Kulkarn' for 'Kulkarni') cannot be caught from
+    one read. The cleaned ink row, and the original grey pixels upscaled 2x and 3x, are each read
+    once. Empty reads abstain. The value is the plurality reading; the field is 'ok' only when every
+    non-empty reading agrees (and at least two exist), so any disagreement, a lone reading, weak
+    words or a short stray fragment send the name to review with the alternatives listed.
+    Returns (value, confidence, raw, issues) or None if no text was found."""
+    row = _best_row(text_rows(region, 0.7))
+    if row is None:
+        return None
+    reads = []  # (name, confidence, lines)
+    lines = engine.read(row.image, "line")
+    reads.append((_clean_name(" ".join(l.text for l in lines)), _mean_conf(lines), lines))
+    pad = int(row.char_h * 0.5)
+    H, W = region.shape[:2]
+    crop = region[max(0, row.y0 - pad):min(H, row.y1 + pad), max(0, row.x0 - pad):min(W, row.x1 + pad)]
+    if crop.size:
+        g = _prep(crop)
+        for fx in (2, 3):
+            ls = engine.read(cv2.resize(g, None, fx=fx, fy=fx, interpolation=cv2.INTER_CUBIC), "line")
+            reads.append((_clean_name(" ".join(l.text for l in ls)), _mean_conf(ls), ls))
+    valid = [r for r in reads if _name_key(r[0])]
+    if not valid:
+        return None
+    votes = Counter(_name_key(r[0]) for r in valid)
+    top_key, top_n = max(votes.items(), key=lambda kv: (kv[1], max(r[1] for r in valid if _name_key(r[0]) == kv[0])))
+    agreeing = [r for r in valid if _name_key(r[0]) == top_key]
+    name, conf, lines = max(agreeing, key=lambda r: r[1])
+    issues = []
+    if top_n < len(valid):
+        others = sorted({r[0] for r in valid if _name_key(r[0]) != top_key})
+        issues.append(f"Readings of the name differ (also read: {', '.join(repr(o) for o in others)}) – confirm visually.")
+    elif len(valid) < 2:
+        issues.append("Name read from one rendering only – confirm visually.")
+    words = [w for ln in lines for w in (ln.words or []) if re.search(r"[A-Za-z]{2,}", w[0])]
+    weak = [w[0] for w in words if w[1] < 0.5]
+    if weak:
+        issues.append("Low-confidence word(s): " + ", ".join(weak[:3]) + " – confirm visually.")
+    tokens = name.split()
+    if len(tokens) > 1 and any(len(t.strip(".")) <= 2 and not t.endswith(".") and not t.isupper() for t in tokens[1:]):
+        issues.append("A short fragment in the name suggests a partial read – confirm visually.")
+    return name, conf, " | ".join(r[0] for r in reads), issues
+
+
+def _header_line_reads(region: np.ndarray, engine: BaseEngine) -> list[Line]:
+    """Read each small text line of the header on its own, as a clean binarised crop.
+    Whole-header reads lose short address lines that sit next to logos or Devanagari text
+    (e.g. the Canara branch line); isolated, they read reliably."""
+    ink = binarize(region)
+    H, W = ink.shape
+    blob = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_RECT, (max(9, W // 60), 3)))
+    n, _, st, _ = cv2.connectedComponentsWithStats(blob)
+    boxes = []
+    for i in range(1, n):
+        x, y, w, h, _ = st[i]
+        if 8 <= h and w >= 3 * min(h, 24):
+            boxes.append((int(x), int(y), int(w), int(h)))
+    med = float(np.median([b[3] for b in boxes if b[3] <= H * 0.25])) if boxes else 0.0
+    split = []
+    for x, y, w, h in boxes:
+        if med and h > 1.6 * med:  # two lines merged by the dilation: cut at blank rows
+            prof = (ink[y:y + h, x:x + w] > 0).sum(1)
+            seg_start = None
+            for j, v in enumerate(list(prof) + [0]):
+                if v > 0 and seg_start is None:
+                    seg_start = j
+                elif v == 0 and seg_start is not None:
+                    if j - seg_start >= 8:
+                        split.append((x, y + seg_start, w, j - seg_start))
+                    seg_start = None
+        elif h <= H * 0.25:
+            split.append((x, y, w, h))
+    out: list[Line] = []
+    for x, y, w, h in split:
+        if w < 3 * h:
+            continue
+        crop = ink[y:y + h, max(0, x - 4):x + w + 4]
+        crop = cv2.resize(255 - crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        crop = cv2.copyMakeBorder(crop, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+        for ln in engine.read(crop, "line"):
+            if ln.text.strip():
+                out.append(Line(ln.text, ln.conf, int(x), int(y), int(w), int(h), ln.words))
+    return out
+
+
 def _extract_date(region: np.ndarray, engine: BaseEngine) -> tuple[str, float, str, list]:
+    """Read the date from several renderings, grouped into independent families:
+    the box-strip reconstruction, rows with box separators removed, and plain rows.
+    Two reads of the same family share their errors (a box-line remnant on a '7' reads as
+    '4' in both), so a date is confirmed only when a different family agrees. An
+    unconfirmed date is kept but sent to review; a different date from another family
+    is reported as a disagreement."""
     issues: list = []
-    candidates = []
+    candidates: list[tuple[str, np.ndarray]] = []
     boxed = boxed_digits(region)
     if boxed is not None:
-        candidates.append(boxed)
-    rows = text_rows(region, 0.7)
-    rows.sort(key=lambda r: -r.n)
-    for row in rows[:2]:
-        candidates += [digit_canvas(row), row.image]
-    for img in candidates:
+        candidates.append(("boxed", boxed))
+    for family, bars in (("no_separators", True), ("plain", False)):
+        rows = text_rows(region, 0.7, drop_bars=bars)
+        rows.sort(key=lambda r: -r.n)
+        for row in rows[:2]:
+            candidates += [(family, digit_canvas(row)), (family, row.image)]
+    found: list[tuple[str, float, str, str]] = []
+    for family, img in candidates:
         lines = engine.read(img, "digits")
         raw = " ".join(l.text for l in lines)
         compact = re.sub(r"[^0-9]", "", raw)
-        if len(compact) == 8:
-            try:
-                d = datetime.strptime(compact, "%d%m%Y").date()
-                return d.isoformat(), _mean_conf(lines), raw, issues
-            except ValueError:
-                issues = ["Date digits read but do not form a valid calendar date."]
-    return "", 0.0, "", issues
+        if len(compact) != 8:
+            continue
+        try:
+            d = datetime.strptime(compact, "%d%m%Y").date()
+        except ValueError:
+            issues = ["Date digits read but do not form a valid calendar date."]
+            continue
+        if not 1990 <= d.year <= 2100:
+            issues = ["Date digits read but the year is implausible."]
+            continue
+        found.append((d.isoformat(), _mean_conf(lines), raw, family))
+    if not found:
+        return "", 0.0, "", issues
+    value, conf, raw, family = found[0]
+    others = [f for f in found if f[3] != family]
+    conflict = next((f for f in found if f[0] != value), None)
+    if conflict:
+        return value, min(conf, 0.5), raw, [f"Readings of the date disagree ({value} vs {conflict[0]}) – confirm visually."]
+    if not others:
+        return value, min(conf, 0.7), raw, ["Date read from one rendering only – confirm visually."]
+    return value, max([conf] + [f[1] for f in others]), raw, []
+
+
+# Published account-number lengths, used only to send unusual reads to review.
+ACCOUNT_LENGTHS = {"Axis Bank": {15}, "ICICI Bank": {12}}
+
+
+def _digits_of(text: str) -> str:
+    """Longest run of digits in a line, joining digits printed with spaces between them
+    ('4005123456789 0') and ignoring symbols glued to the number ('=7001…', '«=©63…')."""
+    t = re.sub(r"(?<=\d)[Oo]|[Oo](?=\d)", "0", text)   # O/o only inside a number
+    t = re.sub(r"(?<=\d)[/|](?=\d)", "", t)          # stray stroke inside the number
+    toks = t.split()
+    merged: list[str] = []
+    for tok in toks:
+        # join letter-spaced digits ('4 0 0 5 1 …', '…789 0'); keep separate groups such as a
+        # label misread as digits ('255 600123456789') apart
+        if merged and tok.isdigit() and merged[-1].isdigit() and (len(tok) == 1 or len(merged[-1]) == 1):
+            merged[-1] += tok
+        else:
+            merged.append(tok)
+    runs = re.findall(r"\d+", " ".join(merged))
+    return max(runs, key=len) if runs else ""
+
+
+def _read_account(region: np.ndarray, engine: BaseEngine) -> tuple[str, float, str, list]:
+    """Two reads of the account row: the normal line read, and a digits-only read of the
+    span that holds the number (labels such as 'A/C NO' excluded). Agreement → normal
+    confidence; disagreement → the digits-only value, sent to review."""
+    best = ("", 0.0, "", [])
+    for row in text_rows(region, 0.7):
+        for ln in engine.read(row.image, "line"):
+            a = _digits_of(ln.text)
+            ndig = lambda w: sum(c.isdigit() for c in w[0])
+            words = sorted(ln.words or [], key=lambda w: w[2])
+            b, bconf = "", 0.0
+            main = max(words, key=ndig) if words else None
+            if main is not None and ndig(main) >= 2:
+                # span of the main number plus letter-spaced single digits next to it
+                x0, x1 = main[2], main[2] + main[4]
+                for w in words:
+                    near = min(abs(w[2] - x1), abs(x0 - (w[2] + w[4]))) <= 1.5 * max(main[5], 1)
+                    if w is not main and 1 <= ndig(w) <= 2 and len(w[0]) <= 2 and near:
+                        x0, x1 = min(x0, w[2]), max(x1, w[2] + w[4])
+                pad = int(0.6 * row.image.shape[0])
+                crop = row.image[:, max(0, x0 - pad // 2):min(row.image.shape[1], x1 + pad)]
+                crop = cv2.copyMakeBorder(crop, 8, 8, 12, 12, cv2.BORDER_CONSTANT, value=255)
+                dl = engine.read(crop, "digits")
+                b, bconf = _digits_of(" ".join(l.text for l in dl)), _mean_conf(dl)
+            a = a if 9 <= len(a) <= 18 else ""
+            b = b if 9 <= len(b) <= 18 else ""
+            if not (a or b):
+                continue
+            if a and a == b:
+                cand = (a, max(float(ln.conf), bconf), ln.text, [])
+            elif b:
+                note = (f"Two readings disagree ('{a}' vs '{b}') – confirm visually." if a
+                        else "Number read only by the digit pass – confirm visually.")
+                cand = (b, min(max(float(ln.conf), bconf), 0.6), ln.text, [note])
+            else:
+                cand = (a, float(ln.conf), ln.text, ["Digit pass could not confirm the number – confirm visually."])
+            if re.search(r"\d[/|]\d", ln.text):
+                cand = (cand[0], min(cand[1], 0.6), cand[2],
+                        cand[3] + ["A stray mark inside the number was ignored – confirm visually."])
+            # prefer agreeing reads, then longer numbers
+            if (bool(cand[0]), not cand[3], len(cand[0])) > (bool(best[0]), not best[3], len(best[0])):
+                best = cand
+    return best
 
 
 _INDIAN = re.compile(r"^\d{1,2}(?:,\d{2})*,\d{3}$")
@@ -246,6 +430,9 @@ def _parse_figures_tokens(text: str, words_value: int | None) -> tuple[int | Non
     a candidate equal to the amount in words is preferred (words prevail on Indian
     cheques). Otherwise the first candidate with valid Indian digit grouping wins."""
     t = text.replace("O", "0").replace("o", "0")
+    t = re.sub(r"(?<=\d),\s+(?=\d)", ",", t)            # '1, 50, 000'  -> '1,50,000'
+    t = re.sub(r"(?<=\d)\s+,(?=\d)", ",", t)            # '21 ,05,000'  -> '21,05,000'
+    t = re.sub(r"(?<=\d)\.(?=\d{2},\d)", ",", t)        # '28.34,000'   -> '28,34,000' (comma read as dot)
     tokens = re.findall(r"\d[\d,]*(?:\.\d{1,2})?", t)
     cands: list[int] = []
     fallback: list[int] = []
@@ -284,9 +471,10 @@ def _mean_conf(lines) -> float:
     return float(np.mean([l.conf for l in lines])) if lines else 0.0
 
 
-def _number_words(text: str) -> str:
-    """Keep only tokens that are (fuzzy) number words, e.g. 'Rupees Twenty-Two Lakh only ~' -> 'Twenty-Two Lakh only'."""
-    kept = []
+def _number_words(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Keep only tokens that are (fuzzy) number words, e.g. 'Rupees Twenty-Two Lakh only ~' -> 'Twenty-Two Lakh only'.
+    Also returns the (printed, normalised) pairs for every word whose spelling had to be changed."""
+    kept, changed = [], []
     for tok in text.split():
         parts = re.findall(r"[A-Za-z]+", tok)
         if not parts:
@@ -294,7 +482,8 @@ def _number_words(text: str) -> str:
         mapped = [amounts._fuzzy(p.lower()) for p in parts]
         if all(m is not None for m in mapped) and not all(m in ("rupees", "rupee", "rs", "inr") for m in mapped):
             kept.append("-".join(m.capitalize() for m in mapped))
-    return " ".join(kept)
+            changed += [(p, m.capitalize()) for p, m in zip(parts, mapped) if p.lower() != m and m not in amounts._FILLER]
+    return " ".join(kept), changed
 
 
 def _validate(fields: dict, today: date | None = None) -> dict:
@@ -386,75 +575,99 @@ def extract_cheque(img: np.ndarray, engine: BaseEngine, micr_model: MicrModel | 
         page_text = "\n".join(l.text for l in page_lines)
         raw_parts.append(page_text)
 
+        line_reads = _header_line_reads(_crop(work, "header"), engine)
         ifsc, iconf, iraw = _find_ifsc_conf(header_lines) or _find_ifsc_conf(page_lines) or ("", 0.0, "")
         if ifsc:
             issues = []
             raw_compact = re.sub(r"[^A-Z0-9]", "", iraw.upper())
             if raw_compact != ifsc:
                 issues.append(f"OCR read '{iraw}'; characters were corrected to fit the IFSC format – confirm visually.")
+            second = _find_ifsc_conf(line_reads)
+            if second and second[0] != ifsc:
+                issues.append(f"A second reading gave '{second[0]}' – confirm visually.")
             fields["ifsc_code"] = _field(ifsc, iconf, "header", iraw, issues)
         bank, bconf, bsrc = _detect_bank(header_text + "\n" + page_text, ifsc)
+        expected = next((code for _, name, code in BANKS if name == bank), None) if bsrc == "page" else None
+        if ifsc and expected and ifsc[:4] != expected and sum(a != b for a, b in zip(ifsc[:4], expected)) == 1:
+            # the bank name is printed on the cheque and the IFSC prefix is one character off its code
+            fixed = expected + ifsc[4:]
+            f = fields["ifsc_code"]
+            f["issues"].append(f"Prefix read as {ifsc[:4]}; corrected to {expected} from the printed bank name – confirm visually.")
+            fields["ifsc_code"] = _field(fixed, f["confidence"], f["source"], f["raw"], f["issues"])
+            ifsc = fixed
+            bank, bconf, bsrc = _detect_bank(header_text + "\n" + page_text, ifsc)
         if bank:
             fields["bank_name"] = _field(bank, bconf, bsrc)
-        # block mode can merge/lose small address lines; sparse mode finds them reliably
-        branch, brconf = _find_branch(header_lines + engine.read(header_img, "sparse"), bank)
+        # block mode can merge/lose small address lines; sparse mode and per-line reads find them
+        branch, brconf = _find_branch(header_lines + engine.read(header_img, "sparse") + line_reads, bank)
         if branch:
             fields["branch_name"] = _field(branch, min(brconf, 0.8), "header",
                                            issues=["Branch text is heuristic – confirm visually."])
 
         # payee
-        prow = _best_row(text_rows(_crop(work, "payee"), 0.7))
-        if prow is not None:
-            plines = engine.read(prow.image, "line")
-            ptext = " ".join(l.text for l in plines)
-            payee = _clean_name(ptext)
-            if payee:
-                fields["payee_name"] = _field(payee, _mean_conf(plines), "region", ptext)
+        pr = _read_payee(_crop(work, "payee"), engine)
+        if pr is not None:
+            fields["payee_name"] = _field(pr[0], pr[1], "region", pr[2], pr[3])
 
         # amount in words (may wrap onto a second line)
-        wparts, wconfs = [], []
+        wparts, wconfs, wchanged = [], [], []
         for row in text_rows(_crop(work, "words"), 0.7):
             wl = engine.read(row.image, "line")
-            kept = _number_words(" ".join(l.text for l in wl))
+            kept, changed = _number_words(" ".join(l.text for l in wl))
             if kept:
                 wparts.append(kept)
                 wconfs.append(_mean_conf(wl))
+                wchanged += changed
         wtext = " ".join(wparts)
         if wtext:
             n = amounts.words_to_number(wtext)
             issues = [] if n else ["Words could not be parsed into a number."]
+            if wchanged:
+                issues.append("Spelling normalised (" + ", ".join(f"'{a}' → '{b}'" for a, b in wchanged[:3])
+                              + ") – compare with the printed words.")
             conf = float(np.mean(wconfs)) if wconfs else 0.0
             fields["amount_words"] = _field(wtext, conf if n else conf * 0.6, "region", wtext, issues)
 
         # amount in figures
         words_value = amounts.words_to_number(fields["amount_words"]["value"])
-        for row in sorted(text_rows(_crop(work, "figures"), 0.7), key=lambda r: -r.char_h * r.n):
+        # The figures region can also contain the tail of the words line ("... Forty Only"), so every
+        # row is read and the best candidate chosen: one equal to the words wins, otherwise the row with
+        # a real amount (≥ 3 digits) and the highest confidence.
+        fcands = []
+        frows = text_rows(_crop(work, "figures"), 0.7)
+        for row in frows:
             fl = engine.read(row.image, "line")
             ftext = " ".join(l.text for l in fl)
             value, note = _parse_figures_tokens(ftext, words_value)
             if value:
-                issues = [note] if note else []
-                fields["amount_figures"] = _field(amounts.format_indian(value) + "/-", _mean_conf(fl), "region", ftext, issues)
-                break
+                fcands.append((value, note, _mean_conf(fl), ftext))
+        if words_value and not any(c[0] == words_value for c in fcands):
+            # first read disagrees with the words: one independent digits-only re-read of each row
+            for row in frows:
+                dl = engine.read(row.image, "digits")
+                dtext = " ".join(l.text for l in dl)
+                value, _ = _parse_figures_tokens(dtext, words_value)
+                if value == words_value:
+                    fcands.append((value, "Confirmed by a second, digits-only reading.", _mean_conf(dl), dtext))
+                    break
+        if fcands:
+            match = [c for c in fcands if words_value and c[0] == words_value]
+            value, note, fconf, ftext = match[0] if match else max(fcands, key=lambda c: (c[0] >= 100, c[2]))
+            fields["amount_figures"] = _field(amounts.format_indian(value) + "/-", fconf, "region", ftext,
+                                              [note] if note else [])
 
         # account number
-        best, aconf = "", 0.0
-        for row in text_rows(_crop(work, "account"), 0.7):
-            for ln in engine.read(row.image, "line"):
-                tokens = [re.sub(r"[Oo]", "0", t) for t in ln.text.split()]
-                cands = [t for t in tokens if re.fullmatch(r"\d{9,18}", t)]
-                if not cands:  # digits printed with spaces between them
-                    joined = re.sub(r"(?<=\d) (?=\d)", "", " ".join(t for t in tokens if t.isdigit()))
-                    cands = re.findall(r"\d{9,18}", joined)
-                for cand in cands:
-                    if len(cand) > len(best):
-                        best, aconf = cand, ln.conf
-        if not best:
+        acct, aconf, araw, aissues = _read_account(_crop(work, "account"), engine)
+        if not acct:
             m2 = re.search(r"A/?C\.?\s*(?:NO\.?)?\s*[:\-]?\s*(\d{9,18})", page_text, re.I)
             if m2:
-                best, aconf = m2.group(1), 0.6
-        if best:
-            fields["account_number"] = _field(best, aconf, "region")
+                acct, aconf, araw, aissues = m2.group(1), 0.6, m2.group(0), ["Read from the full page only."]
+        if acct:
+            expected = ACCOUNT_LENGTHS.get(fields["bank_name"]["value"])
+            if expected and len(acct) not in expected:
+                aissues.append(f"{fields['bank_name']['value']} account numbers have "
+                               f"{'/'.join(map(str, sorted(expected)))} digits; {len(acct)} were read.")
+            fields["account_number"] = _field(acct, aconf, "region", araw, aissues)
 
         # date
         dval, dconf, draw, dissues = _extract_date(_crop(work, "date"), engine)
