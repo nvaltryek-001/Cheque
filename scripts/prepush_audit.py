@@ -42,6 +42,12 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 ALLOWED_PATHS = [
     "backend/models_store/micr_e13b.npz",       # bundled E-13B glyph templates (no cheque images)
 ]
+# Font files that ship with the interface (SIL Open Font License, Frontend/public/fonts/OFL.txt) are binary and would be
+# refused. They are accepted only in that one folder, only when the file really starts with a web-font header, and only
+# when small, so the exception cannot be used to carry an image, a database or an archive.
+FONT_PATH = re.compile(r"^Frontend/public/fonts/[A-Za-z0-9._-]+\.woff2?$")
+FONT_MAGIC = (b"wOFF", b"wOF2")
+FONT_MAX_BYTES = 256 * 1024
 # content scanning is skipped for generated files
 SKIP_CONTENT = ["*package-lock.json", "*.min.js", "*.svg", "*.lock"]
 # generic "password = '…'" matches in these places are example/test credentials: reported as INFO
@@ -187,6 +193,12 @@ def blob_info(root: str, blob: str) -> tuple[int, bool]:
     return size, b"\0" in head
 
 
+def is_shipped_font(root: str, path: str, blob: str, size: int) -> bool:
+    if not FONT_PATH.match(path) or size > FONT_MAX_BYTES or set(blob) == {"0"}:
+        return False
+    return git(root, "cat-file", "blob", blob, binary=True)[:4] in FONT_MAGIC
+
+
 # ------------------------------------------------------------------------------------------------ rules
 def matches_any(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, p) or path == p for p in patterns)
@@ -309,6 +321,7 @@ def audit(root: str, base: str | None, staged: bool, terms: list[Term], extra_al
             elif size > 1024 * 1024:
                 findings.append(Finding(WARN, "large-file", where + path, f"{size / 1048576:.1f} MB"))
             if binary and not matches_any(path, ALLOWED_PATHS + extra_allowed) \
+                    and not is_shipped_font(root, path, ch["blob"], size) \
                     and not any(f.rule in ("image", "document-or-archive", "model-binary") and f.where.endswith(path) for f in findings):
                 findings.append(Finding(ERROR, "binary-file", where + path, "binary content"))
         for path, lineno, text in unit_added_lines(root, unit):

@@ -102,6 +102,21 @@ def test_placeholders_and_the_bundled_model_are_allowed(repo, capsys):
     assert code == 0, res["findings"]
 
 
+def test_shipped_fonts_are_allowed_only_in_their_folder_with_a_font_header_and_a_small_size(repo, capsys):
+    font = b"wOFF\x00\x01\x00\x00" + b"\x00" * 64
+    commit(repo, {"Frontend/public/fonts/inter-400.woff": font, "Frontend/public/fonts/inter-x.woff2": b"wOF2" + b"\x00" * 64})
+    code, res = run(repo, capsys)
+    assert code == 0, res["findings"]
+    for path, content in [("backend/static/inter.woff", font),                                  # another folder
+                          ("Frontend/public/fonts/sub/inter.woff", font),                       # nested folder
+                          ("Frontend/public/fonts/notafont.woff", b"\x89PNG\x00" + b"\x00" * 64),  # not a font
+                          ("Frontend/public/fonts/huge.woff", b"wOFF" + b"\x00" * (300 * 1024))]:   # too big
+        commit(repo, {path: content})
+        code, res = run(repo, capsys)
+        assert code == 1 and "binary-file" in rules(res, "ERROR"), (path, res["findings"])
+        git(repo, "reset", "-q", "--hard", "HEAD~1")
+
+
 @pytest.mark.parametrize("line,rule", [
     (FAKE_PRIVATE_KEY, "private-key"),
     ("aws = '" + FAKE_AWS_KEY + "'", "aws-access-key"),
