@@ -115,9 +115,16 @@ jobs:
           chmod 600 "$RUNNER_TEMP/state.json"
       - name: Server runs unprivileged and data is private
         run: |
-          docker top cv -eo uid,args | tee /dev/stderr | grep "run.py --prod" | awk '{print $1}' | grep -qx 10001
-          sudo stat -c "%a %u" /srv/cvdata/instance/chequeverify.db | tee /dev/stderr | grep -qx "600 10001"
+          # docker top needs the pid column in the ps format (without it: "Couldn't find PID field in ps output")
+          docker top cv -eo pid,uid,args | tee "$RUNNER_TEMP/top.txt"
+          UIDS=$(awk '/run\.py --prod/ {print $2}' "$RUNNER_TEMP/top.txt" | sort -u | tr '\n' ' ')
+          echo "user id of the server process: ${UIDS}"
+          test "${UIDS}" = "10001 "
+          MODE=$(sudo stat -c "%a %u" /srv/cvdata/instance/chequeverify.db)
+          echo "database mode and owner: ${MODE}"
+          test "${MODE}" = "600 10001"
       - name: Security headers on the page and on the API
+        if: ${{ !cancelled() }}
         run: |
           PAGE=$(curl -si http://127.0.0.1:8000/)
           API=$(curl -si http://127.0.0.1:8000/api/health)
@@ -129,6 +136,7 @@ jobs:
           done
           if echo "$PAGE$API" | grep -i "^strict-transport-security" >/dev/null; then echo "HSTS sent over plain HTTP"; exit 1; fi
       - name: Data survives a container restart
+        if: ${{ !cancelled() }}
         run: |
           docker restart cv
           for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health && break; sleep 2; done
@@ -138,6 +146,7 @@ jobs:
             | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["meta"]["total"]>=1,d;print("cheques after restart:",d["meta"]["total"])'
           docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
       - name: A stop is prompt and clean (docker stop sends SIGTERM to PID 1, which has no default action for it)
+        if: ${{ !cancelled() }}
         run: |
           start=$(date +%s)
           docker stop cv
@@ -148,6 +157,7 @@ jobs:
           test "$elapsed" -lt 8
           sudo find /srv/cvdata -name '.tmp-*' | tee /dev/stderr | wc -l | grep -qx 0
       - name: Redeploy rehearsal - remove the container, create a new one on the same disk, compare everything
+        if: ${{ !cancelled() }}
         run: |
           docker rm cv
           docker run -d --name cv -p 8000:8000 -v /srv/cvdata:/data \
@@ -156,6 +166,7 @@ jobs:
           docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
           docker logs cv 2>&1 | grep -E "^seed: [0-9]+ current$"
       - name: Hard kill (SIGKILL, as after an out-of-memory kill or an expired grace period), then start again
+        if: ${{ !cancelled() }}
         run: |
           docker kill cv
           docker start cv
@@ -168,6 +179,7 @@ jobs:
           print("database integrity_check: ok")
           PY
       - name: Behind one reverse proxy (as on Render) HSTS and the client address are honoured
+        if: ${{ !cancelled() }}
         run: |
           sudo mkdir -p /srv/cvdata2 && sudo chown root:root /srv/cvdata2
           docker run -d --name cvp -p 8001:8000 -v /srv/cvdata2:/data \
@@ -186,6 +198,7 @@ jobs:
             -d '{"username":"weakuser","password":"Short-1a","role":"operator"}')
           test "$code" = 400
       - name: Memory - the largest accepted images, eight at once, inside a 512 MB container (the Render Starter plan)
+        if: ${{ !cancelled() }}
         run: |
           sudo mkdir -p /srv/cvdata3 && sudo chown root:root /srv/cvdata3
           docker run -d --name cvm -p 8002:8000 -v /srv/cvdata3:/data --memory=512m --memory-swap=512m \
@@ -196,6 +209,7 @@ jobs:
           test "$(docker inspect -f '{{.State.OOMKilled}}' cvm)" = false
           echo "peak memory of the container (cgroup): $(docker exec cvm cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo n/a) bytes"
       - name: Read-only root filesystem - the application writes only to /data and /tmp
+        if: ${{ !cancelled() }}
         run: |
           sudo mkdir -p /srv/cvdata4 && sudo chown root:root /srv/cvdata4
           docker run -d --name cvr -p 8003:8000 -v /srv/cvdata4:/data --read-only --tmpfs /tmp \
