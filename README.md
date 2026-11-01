@@ -214,8 +214,8 @@ docker build -t chequeverify .
 docker run -p 8000:8000 -e CV_ADMIN_PASSWORD='Choose-a-strong-one-123' -v chequeverify-data:/data chequeverify
 ```
 Or connect this repository to Render as a Blueprint (`render.yaml`). Full guide: `docs/DEPLOYMENT.md`.
-Shortcut that opens Render's Blueprint page with this repository and the `chequeverify-v2` branch filled in (Free plan, no payment needed; Render asks for `CV_ADMIN_PASSWORD`; **on the Free plan all data is erased when the instance sleeps or restarts**, and `render.paid.yaml` is the Starter plan with a 1 GB disk for data that must survive):
-<https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2>
+Shortcut that opens Render's Blueprint page with this repository and its default branch (`main`) filled in (Free plan, no payment needed; Render asks for `CV_ADMIN_PASSWORD`; **on the Free plan all data is erased when the instance sleeps or restarts**, and `render.paid.yaml` is the Starter plan with a 1 GB disk for data that must survive):
+<https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque>
 
 When the service says **Live**, test it from your own computer with your own images (asks for the administrator password with hidden
 typing; prints counts and seconds only, never a value read from a cheque; removes what it created):

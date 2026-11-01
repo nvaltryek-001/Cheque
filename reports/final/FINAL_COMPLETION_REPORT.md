@@ -1,11 +1,11 @@
 # Final completion report
 
-Date: 2026-11-01 · repository `nvaltryek-001/Cheque` · branch `chequeverify-v2` · pull request #1 open and **not merged** · `main` untouched (`d509c14`).
+Date: 2026-11-01 · repository `nvaltryek-001/Cheque` · branch `chequeverify-v2` · pull request #1 **squash-merged** into `main` on 2026-11-01 (`main` is now `b90662c`; it was `d509c14`; the branch `chequeverify-v2` is kept).
 This report contains no cheque image, account number, payee name, password, key or one-time code.
 
 ## 0. Where things stand
 
-*Update, evening of 2026-11-01:* since the figures in section 1 were worked out, the cheque values found in the current files were replaced (three commits), the Vite advisories were fixed, the frontend dependencies were pinned with a lock file, the Git history scan was corrected to cover all 34 revisions (see `SECURITY_AUDIT.md`), and a Free-plan blueprint replaced the paid one. The percentages in section 1 were **not recomputed** and stay as stated; the history exposure keeps Security at its previous level.
+*Update, evening of 2026-11-01:* since the figures in section 1 were worked out, the cheque values found in the current files were replaced (two commits), the Vite advisories were fixed, the frontend dependencies were pinned with a lock file, the Git history scan was corrected to cover all 34 revisions (see `SECURITY_AUDIT.md`), and a Free-plan blueprint replaced the paid one. The percentages in section 1 were **not recomputed** and stay as stated; the history exposure keeps Security at its previous level.
 
 * ChequeVerify AI is a **working pilot application**: sign-in, cheque upload and OCR, field review, signature enrollment and comparison, reports, and the
   OCR dataset with a one-click *Process with OCR* for every sample cheque. It was tested as a whole: 609 backend tests, a real browser, and a real Docker
@@ -17,8 +17,8 @@ This report contains no cheque image, account number, payee name, password, key 
   that the extraction rules were tuned on. Signature accuracy against real forgeries cannot be measured with the delivered data.
 * One **High** finding is open (section 7): the Git history still holds real cheque values. It does not stop a pilot that holds no real cheque data, but it must be decided before the repository is shared more widely.
 * Departure from the written brief, stated plainly: its stop condition said not to push or deploy and to wait for a separate approval. The owner's later message
-  asked to deploy directly, so the branch was pushed to GitHub (no merge, no change to `main`, no force-push, no history rewrite of anything already published) so that
-  Render can build it. Deploying to Render itself was not done.
+  asked to deploy directly, so the branch was pushed to GitHub (at that time with no merge, no change to `main`, no force-push and no history rewrite of anything already published) so that
+  Render can build it. The owner's later message authorized merging pull request #1 "when safe"; it was squash-merged after CI was green on its final head, still with no force-push and no history rewrite. Deploying to Render itself was not done.
 
 ## 1. Readiness percentages
 
@@ -100,7 +100,7 @@ Signatures: another signer accepted 0 of 14,280 pairs; edited copies accepted 2 
 Critical 0. **High 1 open:** one real account number, cheque numbers and MICR codes in the original code, now replaced in the current files but still in the public history and on `main` (owner decision: removing needs a force-push). The second High finding, the Vite 5 development-server advisories, is **fixed** (Vite 6.4.5; `npm audit`: 0 vulnerabilities; commit `15b7bb6`). Medium 4, all fixed (Waitress dropping proxy headers, SIGTERM watchdog race, real values in an unpublished commit, memory exhaustion). Low 3, Informational 3. Pre-push audit against the 323 private values: 0 errors in the commits added by this work; its only error on the whole branch is finding 1, in the original first commit `419ccb8`; low-sensitivity warnings remain in two published test files (a bank routing code in the OpenCV fixtures, an amount in words in a scoring test; finding 8). `pip-audit`: no known vulnerabilities. By the brief's own rule, pushing with unresolved High findings is not recommended; it was done at the owner's explicit request, no account number, payee name, cheque image or signature was published by this work (finding 1 pre-dates it; finding 8 lists the low-sensitivity values that were).
 
 ## 8. Git
-* Branch: `chequeverify-v2` on GitHub (local working branch `chequeverify-v2-publish`, tracking it). `main` is `d509c14`, unchanged. PR #1 untouched.
+* Branch: `chequeverify-v2` on GitHub (local working branch `chequeverify-v2-publish`, tracking it). `main` was `d509c14` until pull request #1 was squash-merged on 2026-11-01; it is now `b90662c` (same files as the branch head). PR #1 is merged; the branch is kept.
 * Working tree when this report was written: only the files of the commit that contains this report were modified; nothing else pending.
 * Commits since `main` (25 before the commit that contains this report, oldest first, as published):
 

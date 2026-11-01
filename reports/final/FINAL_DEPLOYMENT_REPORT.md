@@ -23,10 +23,10 @@ The moment the owner sends the address (or the output of the live check), sectio
 
 ## 2. What the owner has to do (about 10 minutes, no payment, no card)
 
-1. Open <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2> (it opens Render's Blueprint page with this repository and branch filled in; the repository is public, so Render needs no GitHub permission to read it).
+1. Open <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque> (it opens Render's Blueprint page with this repository and its default branch, `main`, filled in; the repository is public, so Render needs no GitHub permission to read it).
 2. Sign in to Render (a free account; "Sign in with GitHub" is fine).
 3. In the form, give the service a name (this becomes the address) and **type the administrator password** into `CV_ADMIN_PASSWORD`: at least 12 characters, not used anywhere else. Do not paste it into a chat, a file or a commit. Leave the other values as they are; the plan is already `Free`.
-4. Press **Apply** / **Create**. The first build takes about 5-10 minutes (it compiles the page and installs Tesseract). The service is ready when Render shows **Live**.
+4. Press **Apply** / **Create**. The first build takes several minutes (an estimate; it compiles the page and installs Tesseract). The service is ready when Render shows **Live**.
 5. Send the address (`https://….onrender.com`) back. Then, from your own computer, run the live check (it asks for the password with hidden typing and prints no private value):
    ```bash
    python3 scripts/live_check.py https://YOUR-SERVICE.onrender.com --cheques "<OCR dataset folder>" --signatures "<signature dataset folder>"
@@ -46,9 +46,9 @@ If anything in Render asks for a card, stop: the Blueprint is a `Free` web servi
 Full details: `SECURITY_AUDIT.md`, findings 1, 8 and 13-15. In short:
 
 - **Found.** Real values from the delivered datasets were in the public repository: one account number, cheque numbers, MICR/routing codes, amounts in words, one payee name and dataset file names (which are cheque and account numbers), in tests, in a label file, in an audit report and - the part a text search cannot see - in the trained MICR model, whose digit labels were stored in training order and so spelled out the training cheques' numbers. No cheque image, signature image, database, secret or password was ever tracked (checked in every revision, including the binaries).
-- **Contained in the current files** (three commits, all checked by the pre-push audit against 518 private values and by CI): every value replaced by an invented one; the model stored in a fixed pseudo-random order (the 120 dataset cheques read identically before and after); training and report code no longer writes file names; new tests keep it that way. A search of the final files for all 518 values finds only one coincidence, a digit run inside a model weight.
+- **Contained in the current files** (two commits, both checked by the pre-push audit against 518 private values and by CI): every value replaced by an invented one; the model stored in a fixed pseudo-random order (the 120 dataset cheques read identically before and after); training and report code no longer writes file names; new tests keep it that way. A search of the final files for all 518 values finds only one coincidence, a digit run inside a model weight.
 - **Not contained: the Git history.** The older commits of `main` (4 commits, from `7ed8fe7`) and the branch's first 29 commits still hold the values, and so does anything already cloned (GitHub's traffic counters showed 68 clones by 24 distinct clients in the 14 days before checking, most of them probably the project's own CI). Removing them means rewriting history and force-pushing, which the owner told the assistant not to do without asking first. **The choice is open**, and it is the owner's:
-  1. **Clean the history** (recommended if the repository must stay public): I rewrite `main` and the branch, replacing the same 15 file versions; I have rehearsed this on a throwaway copy and the same scan then finds none of the 518 values in any file, commit message, author field or branch name (apart from one coincidental run of digits inside a model weight), and every rewritten file still parses. It changes every commit hash, needs a force-push of `main` and the branch, and GitHub Support must be asked to drop cached copies of pull request 1. Anyone who already cloned keeps the old data.
+  1. **Clean the history** (recommended if the repository must stay public): I rewrite `main` and the branch, replacing the 16 file versions that hold a value; I have rehearsed this on a throwaway copy and the same scan then finds none of the 518 values in any file, commit message, author field or branch name (apart from one coincidental run of digits inside a model weight), and every rewritten file still parses; the branch's current files come out byte-identical. It changes every commit hash, needs a force-push of `main` and the branch, and GitHub Support must be asked to drop cached copies of pull request 1. Anyone who already cloned keeps the old data.
   2. **Make the repository private** (Settings → Danger Zone): stops new readers at once, history stays. Render then needs a GitHub connection to read it.
   3. **Accept the disclosure** and treat the numbers as public.
 
@@ -59,7 +59,8 @@ Full details: `SECURITY_AUDIT.md`, findings 1, 8 and 13-15. In short:
 
 ### 4.2 GitHub Actions (five jobs per run: backend, frontend, dependency-audit, private-data-audit, docker)
 - `04e5024` (Free-plan blueprint): 5 of 5 green on the push run (41311174019) and on the pull-request run (41311179584), including the new Docker step "No disk at all (the Render Free plan)".
-- `15b7bb6` (cheque-data containment, 2 of 2, and Vite 6.4.5): see section 5 for the final result.
+- `15b7bb6` (cheque-data containment 2 of 2, Vite 6.4.5): 5 of 5 green on the push run (41326055412) and on the pull-request run (41326061671); `npm audit` for the whole tree: 0 vulnerabilities.
+- `f5962db` (lock file and `npm ci`, blocking `npm audit`, reports; the last code change): push run 41327069274 and pull-request run 41327075332: 5 of 5 jobs green on both, including the Docker image build with `npm ci`.
 - The Docker job builds the image from the repository (including the real `npm run build`) and runs it as a host would: unprivileged user, private files, security headers, 32-step workflow, restart, redeploy and hard-kill persistence, clean stop, reverse-proxy headers, a 512 MB memory check, no disk at all. Details: `DEPLOYMENT_VERIFICATION.md`.
 
 ### 4.3 Security
@@ -76,9 +77,9 @@ This shows the pipeline works end to end with the real datasets. It is **not** a
 
 | | |
 |---|---|
-| `main` | `d509c14e59162afbe937ac7dcabcd5e929c860c3` (4 commits; untouched; the pull request is open and **not merged**) |
-| Branch `chequeverify-v2` | see `git log -1 chequeverify-v2`; the code commit CI verified is `15b7bb6` and later commits change documentation only |
-| Pull request | #1, `chequeverify-v2` → `main`, open |
+| `main` | `b90662cf73e7019ff7876e0613fee5916f47d8ae` - the squash merge of pull request #1 (before it, `main` was `d509c14e59162afbe937ac7dcabcd5e929c860c3`, 4 commits). Its tip is clean; its first four commits still hold the old values (section 3) |
+| Branch `chequeverify-v2` | `f5962db0617f0078c714081695d9091ab8c43050` (kept; its files are identical to the squash merge on `main`). It is also the last code change, verified by CI (section 4.2); later commits on `main` change documentation only |
+| Pull request | #1, `chequeverify-v2` → `main`, **merged** (squash) on 2026-11-01 after CI was green on its head; the branch is kept |
 
 ## 6. What will be checked on the live address (as soon as there is one)
 
