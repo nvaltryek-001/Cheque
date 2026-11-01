@@ -2,9 +2,15 @@
 
 > **Update 2026-10-31 (after the production readiness audit).** Sections 2b and 3b were added. The audit
 > showed that the earlier signature results (section 3) re-captured every query, which hid the fact that
-> synthetic forgeries submitted *as is* were all accepted; section 3b reports decisions with the new
+> synthetic edits ("edited copies") submitted *as is* were all accepted; section 3b reports decisions with the new
 > alteration check. Section 2's "fill rate" figures measure presence, not correctness – section 2b
 > measures correctness against hand-transcribed labels.
+>
+> **Update 2026-11-01 (signature evaluation protocol, `docs/SIGNATURE_EVALUATION_PROTOCOL.md`).** Terminology only; no number in
+> this report was recomputed. The script-generated stroke edits of a specimen are called *edited copies* (earlier text said
+> "synthetic forgery"): they are not attempts by another person, so nothing here is a forgery-detection rate. The code now
+> writes `edited_copy_*` keys; the committed `signature_model_evaluation.json` predates that and keeps the old `forgery_*`
+> key names until it is regenerated. What the delivered data can and cannot measure is in `SIGNATURE_EVALUATION_STATUS.md`.
 >
 > **Update 2026-10-31 (dataset validation, `DATASET_VALIDATION_REPORT.md`).** Each genuine signature image
 > was cropped from that signer's only cheque, so the "genuine re-capture" rows below are the enrolled image
@@ -126,18 +132,18 @@ At the test EER threshold (threshold-free summary only, not an operating point):
 `app/signature/alteration.py` aligns the query to each specimen (ORB + RANSAC, fixed 160 px working
 height) and measures ink present in only one image (grey-level, neighbourhood-tolerant). Edited
 near-copy → MISMATCH; near pixel-identical copy → REVIEW. Thresholds were chosen on train pairs
-(re-captures wrongly flagged 4/160, forgeries caught 86/160 on train). Same seeds as section 3.
+(re-captures wrongly flagged 4/160, edited copies caught 86/160 on train). Same seeds as section 3.
 
 | Query vs reference (test signers) | MATCH | REVIEW | MISMATCH |
 |---|---|---|---|
 | Genuine, simulated re-capture (60) | 4 | 45 | 11 |
-| Synthetic forgery submitted as is (40) | **2** | 17 | 21 |
-| Synthetic forgery, re-captured (40) | 0 | 10 | 30 |
+| Edited copy submitted as is (40) | **2** | 17 | 21 |
+| Edited copy, re-captured (40) | 0 | 10 | 30 |
 | Other signer, re-captured (60) | 0 | 0 | 60 |
 
-MATCH on any negative: 1.4 % (test), 5.0 % (validation). Live API re-test with all 36 forgeries of the
+MATCH on any negative: 1.4 % (test), 5.0 % (validation). Live API re-test with all 36 edited copies of the
 18 test signers whose cheques were matched: 1 MATCH, 17 REVIEW, 18 MISMATCH (previously 36 MATCH).
-25 of the 240 synthetic forgeries differ from their genuine image only by JPEG noise and cannot be detected.
+25 of the 240 synthetic edits differ from their genuine image only by JPEG noise and cannot be detected.
 Genuine re-captures go mostly to REVIEW because they are copies of the same image – real genuine
 signatures were not available to evaluate.
 
@@ -146,5 +152,5 @@ signatures were not available to evaluate.
 - Detecting **small synthetic stroke alterations** is weak (AUC ≈ 0.66). Thresholds were set for few false
   accepts, so most genuine comparisons land in REVIEW – the system defers to a human instead of guessing.
 - Positives are simulated; real signature variation between signing sessions is larger, so real FRR would
-  be higher. Results are not evidence of performance against skilled forgeries.
+  be higher. Results are not evidence of performance against skilled forgeries, nor of genuine acceptance for real signers.
 - Scores are similarity scores, not calibrated probabilities.

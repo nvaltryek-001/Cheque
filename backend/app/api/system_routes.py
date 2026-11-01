@@ -260,8 +260,16 @@ def _readiness() -> dict:
         {"id": "signature_fusion", "name": "Signature similarity fusion (logistic regression)",
          "status": "READY (limited)" if has_sig else "BLOCKED",
          "reason": "Trained on train-split pairs; thresholds on validation. Positives are simulated re-captures "
-                   "because only one genuine specimen per signer exists.",
+                   "because only one genuine specimen per signer exists, and the \"altered\" negatives are script-made "
+                   "edits of the specimen: the results are not genuine-acceptance or forgery-detection rates.",
          "action": "signature_train"},
+        {"id": "signature_evaluation", "name": "Valid signature evaluation (genuine acceptance, skilled forgeries)",
+         "status": "BLOCKED",
+         "reason": "Needs genuine signatures written on later days than the references and forgeries made by other "
+                   "people; the delivered data has one specimen per signer and none of either. Protocol: "
+                   "docs/SIGNATURE_EVALUATION_PROTOCOL.md (python manage.py eval-signatures).",
+         "requirements": "≥30 test signers with ≥5 independent specimens on ≥2 days plus ≥3 specimens on later days, "
+                         "≥3 skilled forgeries per signer by ≥2 other people, split by signer."},
         {"id": "signer_specific", "name": "Signer-specific / Siamese model", "status": "BLOCKED",
          "reason": "Requires several independent genuine specimens per signer and real skilled forgeries.",
          "requirements": "≥5 genuine specimens per signer collected on different days, ≥3 skilled forgeries per "

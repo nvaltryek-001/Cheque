@@ -27,8 +27,9 @@ Verified facts (from `reports/final/SIGNATURE_DATASET_AUDIT.json`):
 | Different-signer rejection | Feasible |
 | Signer-specific trained model | **Blocked** – one specimen per signer |
 | Siamese / metric learning | **Blocked** – no within-signer variation, no real forgeries |
-| Independent evaluation | Limited – disjoint signers, but positive pairs must be simulated |
+| Independent evaluation | Limited – disjoint signers, but positive pairs must be simulated. Genuine acceptance and skilled-forgery rejection are **not measurable**: see `reports/final/SIGNATURE_EVALUATION_STATUS.md` and `docs/SIGNATURE_EVALUATION_PROTOCOL.md` |
 
 ## Data needed to unblock signer-specific learning
-≥ 5 genuine specimens per signer collected on different days, ≥ 3 skilled forgeries per signer by other
-people, ≥ 200 signers, splits by signer, consent and secure storage for biometric data.
+≥ 5 genuine specimens per signer collected on different days (≥ 3 days for signers used to evaluate), ≥ 3 skilled
+forgeries per signer by ≥ 2 other people, ≥ 200 signers, splits by signer, consent and secure storage for biometric
+data. Collection and evaluation rules: `docs/SIGNATURE_ENROLLMENT.md`, `docs/SIGNATURE_EVALUATION_PROTOCOL.md`.

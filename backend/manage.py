@@ -8,6 +8,11 @@
                                               # score against human-verified labels kept outside git
     python manage.py import-collection --manifest M.csv --images DIR [--create-signers] [--dry-run]
                                               # enroll a collected genuine-signature set, one signing session per day
+    python manage.py eval-signatures --dataset
+                                              # what the delivered signature data can and cannot measure (counts only)
+    python manage.py eval-signatures --manifest M.csv --images DIR --split val [--out-dir DIR]
+    python manage.py eval-signatures --manifest M.csv --images DIR --split test --final --thresholds VAL_REPORT.json
+                                              # validity-checked evaluation on independently collected signatures
     python manage.py create-user NAME --role operator
     python manage.py reset-password NAME
     python manage.py unlock-logins              # clear the sign-in throttle (e.g. your own IP got blocked)
@@ -155,6 +160,67 @@ def cmd_import_collection(args) -> None:
         sys.exit(1)
 
 
+def cmd_eval_signatures(args) -> None:
+    """Valid signature evaluation (docs/SIGNATURE_EVALUATION_PROTOCOL.md). Reports contain counts and rates only."""
+    from app.signature import protocol
+    from app.signature.compare import FusionModel
+    if args.dataset:
+        manifests = load_signature_manifests(Path(Config.SIGNATURE_DATASET_DIR))
+        if manifests is None:
+            sys.exit("signature dataset not found")
+        report = protocol.describe_signature_dataset(manifests)
+        stem, out_dir = "SIGNATURE_EVALUATION_STATUS", Path(args.out_dir) if args.out_dir else REPORTS
+    else:
+        if not (args.manifest and args.images):
+            sys.exit("give --dataset, or --manifest and --images (an independently collected evaluation set)")
+        if args.split == "test" and not args.final:
+            sys.exit("the test split is for the final run only: add --final (use --split val while developing)")
+        model = FusionModel.load(Path(args.model) if args.model else MODELS / "signature_fusion.json")
+        if model is None:
+            sys.exit("no trained signature model found (use --model, or run train-signature)")
+        try:
+            items, problems = protocol.load_manifest(Path(args.manifest), Path(args.images))
+        except ValueError as exc:
+            sys.exit(str(exc))
+        for p in problems[:20]:
+            print(f"  manifest line {p['line']}: {p['message']}")
+        if problems:
+            print(f"{len(problems)} manifest row(s) were skipped")
+        thresholds, version = None, model.version
+        if args.thresholds:
+            try:
+                prior = json.loads(Path(args.thresholds).read_text())
+            except (OSError, ValueError):
+                sys.exit("cannot read the --thresholds report")
+            if prior.get("split") != "val" or not prior.get("suggested_thresholds"):
+                sys.exit("--thresholds must be a validation-split report from eval-signatures that has suggested_thresholds")
+            th = prior["suggested_thresholds"]
+            thresholds = {"match": th["match"], "mismatch": th["mismatch"]}
+            version = f"{model.version}|match={th['match']}|mismatch={th['mismatch']}"
+        cfg = {}
+        if args.ref_specimens:
+            cfg["reference_min_specimens"] = args.ref_specimens
+        if args.ref_days:
+            cfg["reference_min_sessions"] = args.ref_days
+        hashes = model.meta.get("fitted_signer_hashes")
+        ledger = Path(args.ledger) if args.ledger else Path(Config.INSTANCE_DIR) / "signature_eval_ledger.json"
+        report = protocol.evaluate(items, split=args.split, decider=protocol.default_decider(model, thresholds),
+                                   model_version=version, final=args.final, cfg=cfg, ledger_path=ledger,
+                                   model_signer_hashes=set(hashes) if hashes is not None else None,
+                                   progress=lambda m: print("  " + m))
+        stem = f"signature_eval_{args.split}" + ("_final" if report["final"] else "")
+        out_dir = Path(args.out_dir) if args.out_dir else None
+    text = protocol.render_markdown(report)
+    print(text)
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{stem}.json").write_text(json.dumps(report, indent=2, default=str))
+        (out_dir / f"{stem}.md").write_text(text, encoding="utf-8")
+        print(f"wrote {out_dir / (stem + '.json')} and {out_dir / (stem + '.md')}")
+    if not args.dataset and not report["validity"]["valid"]:
+        sys.exit(1)
+
+
 def cmd_unlock_logins(_args) -> None:
     app = _db()
     with app.app_context():
@@ -221,6 +287,19 @@ def main() -> None:
     ic.add_argument("--allow-missing-consent", action="store_true", help="accept rows without consent_ref (test data only)")
     ic.add_argument("--dry-run", action="store_true", help="validate the manifest and write nothing")
     ic.set_defaults(fn=cmd_import_collection)
+    ev = sub.add_parser("eval-signatures", help="valid signature evaluation (see docs/SIGNATURE_EVALUATION_PROTOCOL.md)")
+    ev.add_argument("--dataset", action="store_true", help="describe what the delivered signature dataset can measure (no images are read)")
+    ev.add_argument("--manifest", help="evaluation manifest CSV (kept outside git)")
+    ev.add_argument("--images", help="folder the manifest's 'file' column is relative to (kept outside git)")
+    ev.add_argument("--split", default="val", choices=["val", "test"])
+    ev.add_argument("--final", action="store_true", help="final run on the test split (recorded in the ledger)")
+    ev.add_argument("--model", help="fusion model JSON (default: the deployed model)")
+    ev.add_argument("--thresholds", help="validation-split report whose suggested thresholds are frozen for this run")
+    ev.add_argument("--ledger", help="test-use ledger (default: instance/signature_eval_ledger.json)")
+    ev.add_argument("--out-dir", help="write the JSON and markdown report here (counts and rates only)")
+    ev.add_argument("--ref-specimens", type=int, help="reference specimens per signer (default: the deployed policy, 5)")
+    ev.add_argument("--ref-days", type=int, help="signing days among the references (default: the deployed policy, 2)")
+    ev.set_defaults(fn=cmd_eval_signatures)
     sub.add_parser("unlock-logins").set_defaults(fn=cmd_unlock_logins)
     r = sub.add_parser("reset-password")
     r.add_argument("username")

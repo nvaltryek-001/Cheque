@@ -1,0 +1,8 @@
+file,signer_id,kind,session_date,forger_id,source_ref,derived_from,split
+EXAMPLE-001_2026-01-05_01.png,EXAMPLE-001,genuine,2026-01-05,,,,
+EXAMPLE-001_2026-01-05_02.png,EXAMPLE-001,genuine,2026-01-05,,,,
+EXAMPLE-001_2026-01-19_01.png,EXAMPLE-001,genuine,2026-01-19,,,,
+EXAMPLE-001_2026-02-09_01.png,EXAMPLE-001,genuine,2026-02-09,,,,
+EXAMPLE-001_forgery_EXAMPLE-F01_01.png,EXAMPLE-001,skilled_forgery,,EXAMPLE-F01,,,
+EXAMPLE-001_forgery_EXAMPLE-F02_01.png,EXAMPLE-001,skilled_forgery,,EXAMPLE-F02,,,
+EXAMPLE-001_edit_01.png,EXAMPLE-001,synthetic_alteration,,,,EXAMPLE-001_2026-01-05_01.png,

@@ -10,16 +10,24 @@ type SplitSummary = { pairs: Record<string, number>; roc_auc: number | null; eer
 const ACTION_PATH: Record<string, string> = { signature_train: "signature", micr_train: "micr", ocr_eval: "ocr-eval" };
 const KIND_LABEL: Record<string, string> = { signature_train: "Signature fusion training", micr_train: "MICR template training", ocr_eval: "OCR evaluation" };
 const f3 = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(3));
+const PAIR_LABEL: Record<string, string> = {
+  positive: "same image, re-captured", altered: "edited copy of the specimen", impostor: "other signer, re-captured",
+};
 
 function SignatureMetrics({ m }: { m: Record<string, unknown> }) {
   const splits = ["val", "test"].filter((s) => m[s]) as ("val" | "test")[];
   const th = m.thresholds as { match: number; mismatch: number; val_eer: number };
+  const scope = m.scope as { does_not_measure: string[] } | undefined;
   return (
     <div className="stack">
+      <div className="banner banner-warn" role="note">
+        <b>These are not accuracy figures for real signatures.</b>{" "}
+        {scope ? scope.does_not_measure.join(" ") : "The genuine queries are re-captures of one image per signer and the “edited copies” are script-made stroke edits; no independent genuine signing and no forgery by another person was tested."}
+      </div>
       <p>Thresholds chosen on validation: match ≥ <b>{f3(th.match)}</b>, mismatch ≤ <b>{f3(th.mismatch)}</b>. Test pairs were scored once with the frozen model.</p>
       <div className="table-wrap">
         <table className="table compact">
-          <thead><tr><th>Split</th><th className="r">Pairs</th><th className="r">ROC-AUC</th><th className="r">EER</th><th className="r">FAR</th><th className="r">FRR</th><th className="r">Precision</th><th className="r">Recall</th><th className="r">F1</th><th className="r">AUC vs altered</th><th className="r">AUC vs other signer</th></tr></thead>
+          <thead><tr><th>Split</th><th className="r">Pairs</th><th className="r">ROC-AUC</th><th className="r">EER</th><th className="r">FAR</th><th className="r">FRR</th><th className="r">Precision</th><th className="r">Recall</th><th className="r">F1</th><th className="r">AUC vs edited copy</th><th className="r">AUC vs other signer</th></tr></thead>
           <tbody>
             {splits.map((s) => {
               const r = m[s] as SplitSummary;
@@ -50,7 +58,7 @@ function SignatureMetrics({ m }: { m: Record<string, unknown> }) {
                 <thead><tr><th /><th className="r">predicted match</th><th className="r">predicted not</th></tr></thead>
                 <tbody>
                   <tr><td>same signature</td><td className="num r">{a.tp}</td><td className="num r">{a.fn}</td></tr>
-                  <tr><td>different / altered</td><td className="num r">{a.fp}</td><td className="num r">{a.tn}</td></tr>
+                  <tr><td>other signer / edited copy</td><td className="num r">{a.fp}</td><td className="num r">{a.tn}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -60,7 +68,7 @@ function SignatureMetrics({ m }: { m: Record<string, unknown> }) {
                 <thead><tr><th>Pair type</th><th className="r">MATCH</th><th className="r">REVIEW</th><th className="r">MISMATCH</th></tr></thead>
                 <tbody>
                   {Object.entries(r.three_way_decisions).map(([k, v]) => (
-                    <tr key={k}><td>{k}</td><td className="num r">{v.MATCH ?? 0}</td><td className="num r">{v.REVIEW ?? 0}</td><td className="num r">{v.MISMATCH ?? 0}</td></tr>
+                    <tr key={k}><td>{PAIR_LABEL[k] ?? k}</td><td className="num r">{v.MATCH ?? 0}</td><td className="num r">{v.REVIEW ?? 0}</td><td className="num r">{v.MISMATCH ?? 0}</td></tr>
                   ))}
                 </tbody>
               </table>

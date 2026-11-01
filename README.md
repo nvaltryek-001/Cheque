@@ -92,7 +92,8 @@ ChequeVerify/
 │   ├── src/                     main.tsx, App.tsx, api.ts, auth.tsx, router.ts, styles.css, components/, pages/
 │   ├── dist/                    production bundle from `npm run build` (not committed)
 │   ├── package.json, vite.config.ts, tsconfig.json, index.html
-├── docs/                        API.md, ARCHITECTURE.md, OCR_DATASET.md, SIGNATURE_DATASET.md, SECURITY.md
+├── docs/                        API.md, ARCHITECTURE.md, OCR_DATASET.md, SIGNATURE_DATASET.md, SIGNATURE_ENROLLMENT.md,
+│                                SIGNATURE_EVALUATION_PROTOCOL.md, SECURITY.md
 ├── reports/final/               audits, evaluations, test results, completion report
 ├── dataset/                     ← put the OCR dataset here (train/ vaildate/ test/ <bank>/)
 ├── signature/                   ← put the signature dataset here (genuine_signatures.csv …)
@@ -123,7 +124,7 @@ Siamese training is **blocked**. See `docs/SIGNATURE_DATASET.md`.
 | MICR E-13B reader | 480 glyph templates from 80 train cheques (labels = filename cheque number) | Cheque number exact match **20 of 20** test cheques (19/19 val). 95 % lower confidence bound ≈ 83 %. |
 | Field extraction (Tesseract 5.3.4) | Rules + region isolation; developed on train/val | Against hand-transcribed labels for the 20 test cheques (transcribed by Claude, not yet human-verified): **182/200 fields correct**; bank, cheque no., MICR 20/20; payee 17/20; branch 14/20; 16 of 18 wrong values are flagged for review |
 | Handwritten OCR | — | **Blocked**: no handwritten fields, no transcriptions |
-| Signature fusion (logistic regression over 8 similarity features) + alteration check | Fusion on train pairs, thresholds on validation, alteration thresholds on train | Different signer: 0/60 accepted. Synthetic forgery submitted as-is: **2/40 accepted**, 21/40 rejected, 17/40 review (before the alteration check every as-is forgery was accepted). MATCH on any negative 1.4 %. Simulated genuine re-captures mostly go to REVIEW (45/60) |
+| Signature fusion (logistic regression over 8 similarity features) + alteration check | Fusion on train pairs, thresholds on validation, alteration thresholds on train | Different signer: 0/60 accepted. Script-made edit of the specimen (an *edited copy*, not a forgery by another person) submitted as-is: **2/40 accepted**, 21/40 rejected, 17/40 review (before the alteration check every as-is edited copy was accepted). MATCH on any negative 1.4 %. Simulated genuine re-captures mostly go to REVIEW (45/60). **These figures say nothing about real genuine signatures or skilled forgeries** – see `docs/SIGNATURE_EVALUATION_PROTOCOL.md` |
 | Signer-specific / Siamese | — | **Blocked**: needs several real specimens per signer |
 
 Full numbers, protocol and caveats: `reports/final/MODEL_EVALUATION.md`.
@@ -234,15 +235,17 @@ independent security test (open items: `docs/SECURITY.md`).
 - Test cheques share templates with training cheques, so results on unseen layouts will be lower.
 - Signature verification: one specimen per signer, synthetic alterations only, simulated positive pairs,
   20 test signers. An alignment-based check rejects most edited copies, but ~10 % of the synthetic
-  forgeries contain no visible edit and cannot be detected; behaviour on real, independently signed
-  genuine signatures and on skilled forgeries is untested.
+  edits contain no visible change and cannot be detected; behaviour on real, independently signed
+  genuine signatures and on skilled forgeries is untested and, with this data, **not measurable**
+  (`reports/final/SIGNATURE_EVALUATION_STATUS.md`). The application does not claim to detect forged signatures.
 - In this dataset the enrolled specimens were cropped from the same cheque scans, so verifying those
   cheques against them is not an independent test (the copy check sends these to REVIEW as near-identical copies).
 - PaddleOCR adapter follows the documented 3.x API but was not executed in the build environment.
 
 ## 13. Future scope
 
-Collect ≥ 5 genuine specimens per signer and real skilled forgeries, then train a metric-learning model;
+Collect genuine specimens over several days and real skilled forgeries (`docs/SIGNATURE_ENROLLMENT.md`), evaluate with
+`docs/SIGNATURE_EVALUATION_PROTOCOL.md`, and only then consider a metric-learning model;
 label handwritten field crops (the review screen already records corrections) and fine-tune PaddleOCR
 recognition; layout detection for unseen templates; MFA/SSO; encrypted object storage; PostgreSQL.
 

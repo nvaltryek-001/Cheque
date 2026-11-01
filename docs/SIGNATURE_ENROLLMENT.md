@@ -43,6 +43,9 @@ forgery is the costly error, so only the accepting direction is capped.
 * Natural writing: the signer's usual pen, speed and posture, in a box about the size of a cheque's signature
   field. No tracing, no copying earlier samples, no "neat" signing for the camera.
 * Do not use signatures cut from cheques that will later be used to test the system.
+* Signers collected to **evaluate** the system (rather than to be verified by it) need **at least 3 signing days**: the references
+  come from the first two days and the genuine test signatures from later ones. They must never be used to train or tune
+  anything, and each evaluation signer also needs forgeries by other people – see `docs/SIGNATURE_EVALUATION_PROTOCOL.md` §4.
 
 **Capture**
 * Flatbed scan at 300 dpi (grey or colour) or a flat, evenly lit photo without shadows or glare; a tablet export is fine.
@@ -115,7 +118,7 @@ are cut from cheque scans, so those signers will not become ready from that data
 |---|---|
 | prove on which day someone signed | the session date is the collector's attestation; the audit log records when each session was entered |
 | recognise two photocopies of one signing that differ more than 2 % | record sessions and sources honestly; `source_ref` merges known repeats |
-| tell a genuine signature from a skilled forgery of it | enrollment relies on trusted staff and consent; forgery handling belongs to evaluation (Phase 4 protocol) |
+| tell a genuine signature from a skilled forgery of it | enrollment relies on trusted staff and consent; forgery handling belongs to evaluation (`docs/SIGNATURE_EVALUATION_PROTOCOL.md`) |
 
 ## 6. Effect on verification
 
@@ -145,7 +148,8 @@ and the audit entry for the verification says so. The signature screen shows the
 
 ## 9. What this does not give you
 
-* No skilled forgeries are collected here, so enrollment data alone cannot measure false acceptance.
+* No skilled forgeries are collected here, so enrollment data alone cannot measure false acceptance; the evaluation protocol
+  (`docs/SIGNATURE_EVALUATION_PROTOCOL.md`) defines what extra data that needs.
 * "Ready" is a policy threshold chosen as a conservative default, not an optimum derived from data.
 * The independence of days is attested, not proven.
 * No real collection has been run; every number in the tests comes from generated signatures.

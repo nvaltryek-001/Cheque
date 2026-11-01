@@ -76,10 +76,11 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | Genuine signature acceptance / false rejection | **not measurable** – the only genuine image per signer is cropped from that signer's cheque (`DATASET_VALIDATION_REPORT.md`) |
 | Random impostor (other signer's cheque signature), test | accepted 0/380 |
 | Cheque number / MICR code / bank name | 20/20 each |
-| Synthetic forgery submitted as-is (test signers) | accepted 2/40, rejected 21/40, review 17/40 |
+| Edited copy (script-made edit of the specimen; **not** a forgery by another person) submitted as-is (test signers) | accepted 2/40, rejected 21/40, review 17/40 |
+| Skilled-forgery acceptance / rejection | **not measurable** – no forgery by another person exists in the data (`SIGNATURE_EVALUATION_STATUS.md`) |
 | Other-signer signature (test) | accepted 0/60 |
 | MATCH on any negative (test) | 1.4 % |
-| Live API: synthetic forgery vs target | 1/36 MATCH (was 36/36) |
+| Live API: edited copy vs target | 1/36 MATCH (was 36/36) |
 
 ## 8. Task checklist
 | # | Task | Status | Evidence / next step |
@@ -87,7 +88,7 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 1 | OpenCV `HOGDescriptor` compatibility | TESTING | Pinned `<5` (CI green on 4.x). Golden-value test added; must pass in CI after the next push |
 | 2 | PDF crash on markup in corrections | COMPLETED | escaped in `reports.py`; regression test fails before / passes after |
 | 3 | OCR payee truncation + wrong "ok" statuses | COMPLETED (partially improves accuracy) | test 171→182/200, wrong-ok 6→2; 2 ICICI payee mis-reads remain |
-| 4 | Synthetic forgeries accepted | COMPLETED | 36/36 → 1/36 MATCH in the live app; ~10 % of forgeries have no visible edit |
+| 4 | Edited copies (script-made edits of a specimen) accepted | COMPLETED | 36/36 → 1/36 MATCH in the live app; ~10 % of the edits have no visible change. Earlier notes and reports call these "synthetic forgeries"; they are not forgeries by another person |
 | 5 | Models/reports persistence + root-owned disk | TESTING | entrypoint verified locally (simulated, as root); Docker CI job extended – runs after push |
 | 6 | Real client IP behind proxy | COMPLETED | ProxyFix via `CV_PROXY_HOPS`; test added |
 | 7 | Private file permissions | COMPLETED | umask 077 → 600 files (verified) |
@@ -95,7 +96,7 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 9 | CSP / HSTS headers | COMPLETED | Phase 2: strict CSP (no inline/eval), HSTS on HTTPS only, Permissions-Policy, COOP/CORP, neutral `Server`. Chromium check (`tests/browser_check.py`, 30 checks) on an esbuild bundle of the sources; HSTS behind a proxy tested with a simulated proxy, real-container check runs in CI |
 | 10 | Canara branch, ICICI dates, Syndicate account extraction; payee marked ok | TESTING | Phase 1 (2026-10-31): fixed on val/train/test; test 196/200, 0 wrong-but-ok (test set not blind – see §9). Needs fresh human-verified cheques |
 | 11 | Human verification of the 40 OCR labels | BLOCKED | needs a person; labels delivered privately |
-| 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection |
+| 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection; requirements in `docs/SIGNATURE_EVALUATION_PROTOCOL.md` §4 |
 | 13 | Dataset tests in CI | BLOCKED | datasets are private; needs private runner or synthetic fixtures |
 | 15 | Dataset validation (OCR test set + signature dataset) | COMPLETED | `reports/final/DATASET_VALIDATION_REPORT.md`; awaiting owner review before push |
 | 14 | Render deployment | NOT STARTED | needs owner approval and a paid plan for the disk |
@@ -108,6 +109,8 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 22 | HttpOnly-cookie sessions, MFA/SSO, encryption at rest | NOT STARTED | design decisions for the deployer, see `docs/SECURITY.md` |
 | 23 | Genuine-signature collection and enrollment workflow (software) | COMPLETED | Phase 3: signing sessions, independence/readiness rule, same-signing refusal (≥ 98 % aligned ink agreement), batch upload, MATCH cap, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload). 88 new tests (`test_enrollment.py` 63, `test_collection.py` 25), live smoke 28/28, Chromium check 41/41 under the CSP. Protocol: `docs/SIGNATURE_ENROLLMENT.md` |
 | 24 | Real collection of genuine signatures under that protocol | BLOCKED | needs consenting signers, a collector, an encrypted store; target ≥ 30 signers × ≥ 10 signatures on ≥ 2 days (see §9) |
+| 25 | Valid signature evaluation protocol (software + rules) | COMPLETED | Phase 4: `app/signature/protocol.py`, `manage.py eval-signatures`, `docs/SIGNATURE_EVALUATION_PROTOCOL.md`. Signer-level splits, references = thinnest ready set from the earliest days, genuine queries strictly later, skilled forgeries need ≥ 3 per signer by ≥ 2 forgers, synthetic edits excluded from every forgery metric, thresholds from validation, test split only with `--final` + ledger, signer-level bootstrap intervals, "not measurable" instead of numbers. 94 tests (`test_protocol.py`); whole backend suite 346 passed / 7 skipped, live smoke 28/28, Chromium check 41/41 under the CSP; synthetic data only |
+| 26 | Run the protocol on a real evaluation set | BLOCKED | needs ≥ 30 test signers on ≥ 3 days with forgeries by ≥ 2 other people (task 24 + forgers); until then genuine acceptance and skilled-forgery rejection stay unmeasured |
 
 ## 9. Known bugs / limitations
 - OCR (after phase 1, test set, not blind): 4 of 200 fields still wrong, all flagged for review; 44 of 196
@@ -122,7 +125,17 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 - The signature dataset has no independent genuine sample (each specimen is cropped from its signer's only
   cheque) and no skilled forgeries; ~2/3 of specimens appear to be typeset names. Behaviour on real,
   independently signed genuine signatures and on skilled forgeries is unknown.
-- 10 % of synthetic forgeries are visually identical to the genuine image (undetectable by design).
+- 10 % of the synthetic edits ("edited copies") are visually identical to the genuine image (undetectable by design).
+- No claim of forgery detection is made or supported: the only negatives with an edit are script-generated edits of the
+  specimen itself (reported as edited-copy detection); the 120 specimens have no signing dates, so genuine acceptance /
+  false rejection are not measurable either. `eval-signatures --dataset` regenerates this statement from the manifests.
+- The copy-and-alter rule was tuned on synthetic edits. On pseudo-signatures written twice by the same "hand" with a few
+  pixels of wobble it flagged every re-signing as altered (synthetic test data, not a measurement): its false-rejection rate on
+  real re-signed signatures is unknown and will show up as `genuine_mismatch_rate` in the first real evaluation.
+- The deployed signature model predates the protocol and does not record which signers it was fitted on, so the
+  protocol reports that check as a warning for it; models trained from now on store signer hashes (`meta.fitted_signer_hashes`).
+- The committed `reports/final/signature_model_evaluation.json` still has the older `forgery_*` key names; it is regenerated
+  by `manage.py train-signature` (planned for the regression run).
 - Enrollment policy (Phase 3, **behaviour change**): the cap is on by default, so every signer whose specimens have
   no recorded signing session (all existing enrollments, all dataset imports) gets REVIEW instead of MATCH until
   sessions are recorded or linked. This is deliberate (one specimen cannot support a MATCH) and can be switched off
@@ -152,3 +165,4 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-10-31 | Phase 1 OCR: digit-pass account read, 3-rendering payee vote, amount-box re-read, boxed-date families, per-line header reads, IFSC prefix repair, spelling-normalisation flag; `score-ocr` command |
 | 2026-11-01 | Phase 2 security: header-based image size limit, persisted sign-in throttle (no account lock), per-user rate limits, password policy, CSP/HSTS/Permissions-Policy/COOP/CORP, CI hardening + Dependabot, `.env` comment parsing fix, pre-push audit tool; real values removed from tests (`57dba7d`) |
 | 2026-11-01 | Phase 3 signature enrollment: `enrollment_sessions` table + specimen provenance columns (additive migration), readiness rule and MATCH cap, same-signing refusal, batch upload, session/readiness API, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload, readiness column, verification banner, settings), `docs/SIGNATURE_ENROLLMENT.md`, manifest template; default `signature.max_specimens_per_signer` 5 → 20 for new installs |
+| 2026-11-01 | Phase 4 signature evaluation protocol: `app/signature/protocol.py`, `manage.py eval-signatures` (`--dataset` status report, `--split val`, `--split test --final`), test-use ledger, suggested thresholds from validation only, claims generated from the report; training report relabelled ("edited copy", `scope` block, `fitted_signer_hashes` in the model); Training page notice; `docs/SIGNATURE_EVALUATION_PROTOCOL.md`, manifest template, `reports/final/SIGNATURE_EVALUATION_STATUS.{md,json}`; "Valid signature evaluation" added to training readiness as BLOCKED |

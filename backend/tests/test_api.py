@@ -261,6 +261,7 @@ def test_dataset_audits_and_readiness(client, admin, operator):
     assert r.json["data"]["total_images"] == 120
     tasks = {t["id"]: t["status"] for t in client.get("/api/models/readiness", headers=operator).json["data"]["tasks"]}
     assert tasks["handwritten_ocr"] == "BLOCKED" and tasks["signer_specific"] == "BLOCKED"
+    assert tasks["signature_evaluation"] == "BLOCKED"          # no independent genuine signatures or real forgeries exist
 
 
 def test_dataset_image_path_traversal(client, operator):

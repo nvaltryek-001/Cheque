@@ -224,10 +224,27 @@ def _r(x):
     return round(x, 4) if x is not None else None
 
 
+SCOPE = {
+    "measures": [
+        "Whether a re-captured copy of the SAME image (rotation, scale, blur, noise, JPEG) scores above other signers' images.",
+        "Whether script-generated stroke edits of a specimen ('edited copies') are caught by the alignment check.",
+    ],
+    "does_not_measure": [
+        "Genuine acceptance or false rejection for real signers: the genuine queries are re-captures of the reference image, "
+        "not new signings.",
+        "Detection of forgeries made by another person (skilled forgery): the dataset contains none.",
+        "Anything about the people in the data set beyond one specimen each; no population-level accuracy.",
+    ],
+    "valid_protocol": "backend/app/signature/protocol.py (manage.py eval-signatures); see docs/SIGNATURE_EVALUATION_PROTOCOL.md",
+}
+
+
 def evaluate_decisions(manifests: dict, split: str, model: FusionModel, cfg: dict) -> dict:
     """End-to-end MATCH/REVIEW/MISMATCH decisions, including the alteration check, for:
-    recaptured genuine (simulated positive), synthetic forgery submitted as-is, re-captured synthetic
-    forgery, and re-captured other-signer signature. Same seeds as build_pairs."""
+    recaptured genuine (simulated positive), synthetic edit of the specimen submitted as-is, re-captured
+    synthetic edit, and re-captured other-signer signature. Same seeds as build_pairs.
+    A synthetic edit is a script-generated change to the specimen itself ("edited copy"), not a forgery by
+    another person: nothing here measures forgery detection (see signature/protocol.py)."""
     from .compare import decide
     rng = random.Random(f'{cfg["seed"]}-decisions-{split}')
     genuine = [r for r in manifests["genuine"] if r["split_norm"] == split]
@@ -245,7 +262,7 @@ def evaluate_decisions(manifests: dict, split: str, model: FusionModel, cfg: dic
         for a in altered.get(g["signer_id"], []):
             img = cv2.imread(str(a["path"]), cv2.IMREAD_COLOR)
             if img is not None:
-                queries += [("forgery_as_is", img), ("forgery_recaptured", recapture(img, rng))]
+                queries += [("edited_copy_as_is", img), ("edited_copy_recaptured", recapture(img, rng))]
         others = [x for x in genuine if x["signer_id"] != g["signer_id"]]
         for o in rng.sample(others, min(cfg["impostors_per_signer"], len(others))):
             img = cv2.imread(str(o["path"]), cv2.IMREAD_COLOR)
@@ -259,13 +276,13 @@ def evaluate_decisions(manifests: dict, split: str, model: FusionModel, cfg: dic
     res = {k: dict(v) for k, v in out.items()}
     pos = out["genuine_recaptured"]
     neg = Counter()
-    for k in ("forgery_as_is", "forgery_recaptured", "other_signer_recaptured"):
+    for k in ("edited_copy_as_is", "edited_copy_recaptured", "other_signer_recaptured"):
         neg.update(out[k])
     total_neg = sum(neg.values())
     res["summary"] = {
         "false_accept_rate_MATCH_on_negatives": round(neg["MATCH"] / total_neg, 4) if total_neg else None,
-        "forgery_as_is_accepted": f'{out["forgery_as_is"]["MATCH"]}/{sum(out["forgery_as_is"].values())}',
-        "forgery_as_is_rejected": f'{out["forgery_as_is"]["MISMATCH"]}/{sum(out["forgery_as_is"].values())}',
+        "edited_copy_as_is_accepted": f'{out["edited_copy_as_is"]["MATCH"]}/{sum(out["edited_copy_as_is"].values())}',
+        "edited_copy_as_is_rejected": f'{out["edited_copy_as_is"]["MISMATCH"]}/{sum(out["edited_copy_as_is"].values())}',
         "genuine_recaptured_MATCH": f'{pos["MATCH"]}/{sum(pos.values())}',
         "genuine_recaptured_MISMATCH": f'{pos["MISMATCH"]}/{sum(pos.values())}',
     }
@@ -303,6 +320,7 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
             idx = [i for i, kk in enumerate(kd["val"]) if kk in ("positive", neg)]
             feature_auc[f"{k}__vs_{neg}"] = _r(roc_auc([vals[i] for i in idx], [lb["val"][i] for i in idx]))
 
+    from .protocol import signer_hash                    # imported here: protocol imports this module
     digest = hashlib.sha256(repr(sorted(weights.items())).encode()).hexdigest()[:8]
     meta = {
         "version": f"fusion-lr-{stamp}-{digest}",
@@ -310,6 +328,9 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
         "config": cfg,
         "features": FEATURES,
         "task": "reference-vs-query similarity; positives are simulated re-captures (see docs)",
+        # signers whose images fitted the weights (train) or chose the thresholds (val); stored as hashes so the
+        # evaluation protocol can refuse to test on them without the model file naming anybody
+        "fitted_signer_hashes": sorted({signer_hash(p["signer"]) for s in ("train", "val") for p in pairs[s]}),
     }
     model.meta = meta
     report = {
@@ -322,6 +343,7 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
         "val": summarize(sc["val"], lb["val"], kd["val"], model.thresholds),
         "test": summarize(sc["test"], lb["test"], kd["test"], model.thresholds) if pairs["test"] else None,
         "signers_per_split": {s: len({p["signer"] for p in pairs[s]}) for s in pairs},
+        "scope": SCOPE,
         "decisions_with_alteration_check": {},
         "leakage_check": {
             "train_val_overlap": len({p["signer"] for p in pairs["train"]} & {p["signer"] for p in pairs["val"]}),
@@ -331,7 +353,8 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
         "limitations": [
             "Only one genuine specimen per signer: positive pairs are simulated re-captures of the same image, "
             "so the model has never seen natural within-signer variation.",
-            "Altered signatures are synthetic stroke additions/erasures of the reference image, not skilled forgeries.",
+            "Altered signatures are synthetic stroke additions/erasures of the reference image ('edited copies'), not "
+            "forgeries by another person: no figure in this report is a forgery-detection rate.",
             "Scores are similarity scores, not calibrated probabilities.",
             "Small test set (20 signers): metrics carry wide uncertainty.",
         ],
@@ -341,7 +364,7 @@ def train_and_evaluate(manifests: dict, cfg: dict | None = None, progress=None) 
             progress(f"evaluating decisions with alteration check on {split}")
         report["decisions_with_alteration_check"][split] = evaluate_decisions(manifests, split, model, cfg)
     report["limitations"].append(
-        "About 10% of the synthetic forgeries (25/240) differ from their genuine image only by JPEG noise – the "
+        "About 10% of the synthetic edits (25/240) differ from their genuine image only by JPEG noise – the "
         "random edit landed on blank paper – so no method can distinguish them; they count against detection.")
     report["limitations"].append(
         "Genuine positives are re-captures of the same image, so they are near-identical copies and the copy "
