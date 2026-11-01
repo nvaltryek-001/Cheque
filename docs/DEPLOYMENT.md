@@ -18,10 +18,17 @@ To use the datasets inside the container (dataset pages, import, training), moun
 Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a private network.
 
 ## 2. Render (managed hosting, connected to this GitHub repo)
-1. Push this branch to GitHub (see below) and merge it into `main`.
-2. render.com → New → **Blueprint** → select `nvaltryek-001/Cheque`. Render reads `render.yaml`.
-3. Enter a value for `CV_ADMIN_PASSWORD` when asked → **Apply**. Render builds the Dockerfile and gives
-   you an `https://chequeverify-ai-xxxx.onrender.com` URL. Every push to `main` redeploys.
+1. Make sure the branch you want to run is on GitHub (see *Pushing* below). Nothing needs to be merged into `main`.
+2. render.com → New → **Blueprint** → connect `nvaltryek-001/cheque` → in the Blueprint settings choose the branch
+   (for example `chequeverify-v2`). Render reads `render.yaml` from that branch.
+3. Enter a value for `CV_ADMIN_PASSWORD` when asked (12 or more characters; it is not stored in git) → **Apply**.
+   Render builds the Dockerfile (the first build takes several minutes) and gives you an
+   `https://chequeverify-ai-xxxx.onrender.com` URL. Every push to the linked branch redeploys; add `[skip render]`
+   to the commit message of a documentation-only change to avoid a rebuild.
+4. Open the URL → *Administrator sign-in* → user `admin` and the password from step 3. Sign-in by emailed code needs
+   the `CV_SMTP_*` values (below); until they are set only the administrator sign-in works.
+5. The hosted copy starts empty. The private datasets are not in git or in the image. To use your own cheques, sign in
+   and use the batch upload on the Cheques page; signature specimens are added on the Signers page.
 - `render.yaml` uses the *starter* plan because a persistent disk is required to keep data; on the free
   plan the service works but loses all records on every restart/redeploy.
 - What Render's documentation says about a service with a disk (checked against docs.render.com, not exercised here
@@ -37,7 +44,8 @@ Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a priva
   peaked above 1 GB in the rehearsal, which would end in an out-of-memory kill and a restart for every user. The blueprint
   therefore sets `CV_MAX_IMAGE_PIXELS=12000000` (a full 600 dpi cheque is 10.7 MP) and `CV_MAX_CONCURRENT_IMAGES=2`
   (others wait up to `CV_IMAGE_QUEUE_SECONDS`, then get `503 busy` with `Retry-After`), and the image sets glibc malloc
-  options. With these, eight simultaneous maximum-size uploads peaked at about 250 MB in the rehearsal (see
+  options, and the Dockerfile itself now defaults to the same two limits. With these, eight simultaneous maximum-size
+  uploads peaked between 250 and 395 MB in repeated rehearsals (see
   `reports/final/DEPLOYMENT_VERIFICATION.md` for what that measurement does and does not show). Raise the limits only
   together with a larger plan.
 - The private datasets are not in git, so dataset audit/import/training screens show "not found" on the
@@ -62,7 +70,7 @@ the Windows firewall port to reach it from other PCs on the LAN.
 | `CV_PROXY_HOPS` | 0 | 1 behind Render / one load balancer; 0 when the app is reached directly |
 | `CV_RATE_LIMIT_PER_MIN` | 120 | keep; 0 switches the per-user limit off |
 | `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_IP_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` | 5, 20, 300 | keep |
-| `CV_MAX_IMAGE_PIXELS` | 25000000 | 12000000 on a 512 MB instance (set in `render.yaml`); a 300 dpi A4 scan is ≈ 8.7 million, a 600 dpi cheque ≈ 10.7 million |
+| `CV_MAX_IMAGE_PIXELS` | 12000000 in the Docker image (25000000 when the app runs without Docker) | the image is safe in 512 MB as shipped; raise it only on a host with more memory. A 300 dpi A4 scan is ≈ 8.7 million pixels, a 600 dpi cheque ≈ 10.7 million. Larger images are refused with `413 image_too_large` and a message that names the limit |
 | `CV_MAX_CONCURRENT_IMAGES`, `CV_IMAGE_QUEUE_SECONDS` | 2, 30 | keep on a 512 MB instance; images are processed this many at a time, others wait this long and then get `503 busy` |
 | `CV_STOP_GRACE_SECONDS` | 20 | seconds the server may take to finish after SIGTERM before it ends itself (keep it below the platform's grace period; Render's is 30) |
 | `PORT` | 8000 (image), 10000 (Render) | set by the platform |

@@ -18,6 +18,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
 # Measured with scripts/deploy_simulation.py: eight simultaneous 12-megapixel uploads peak at about 250 MB with these
 # settings and at 370-580 MB without them (a Render Starter instance has 512 MB), at about 10 % more processing time.
 ENV MALLOC_ARENA_MAX=2 MALLOC_MMAP_THRESHOLD_=131072 MALLOC_TRIM_THRESHOLD_=131072
+# The image is meant to be safe in a 512 MB container (Render Starter) without further settings. Measured with
+# scripts/deploy_simulation.py: two 25-megapixel scans in flight peaked at 540 MB, which is over 512 MB; 12 megapixels
+# (a full 600-dpi cheque is 10.7 MP) with two images in flight stays near 270 MB. A host with more memory can raise
+# CV_MAX_IMAGE_PIXELS (the application's own default outside Docker is 25 MP); further requests wait for a free slot.
+ENV CV_MAX_IMAGE_PIXELS=12000000 CV_MAX_CONCURRENT_IMAGES=2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/* \

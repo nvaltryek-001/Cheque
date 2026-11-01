@@ -62,6 +62,9 @@ def test_memory_settings_for_a_512_mb_instance_are_in_the_image():
     assert DOCKER_ENV["MALLOC_ARENA_MAX"] == "2"
     assert int(BLUEPRINT["CV_MAX_IMAGE_PIXELS"]["value"]) <= 12_500_000
     assert int(BLUEPRINT["CV_MAX_CONCURRENT_IMAGES"]["value"]) <= 2
+    # the image is safe in 512 MB on its own, not only through the blueprint: two 25 MP scans peaked at 540 MB in the rehearsal
+    assert int(DOCKER_ENV["CV_MAX_IMAGE_PIXELS"]) <= 12_500_000
+    assert int(DOCKER_ENV["CV_MAX_CONCURRENT_IMAGES"]) <= 2
 
 
 def test_private_data_cannot_enter_the_image():
