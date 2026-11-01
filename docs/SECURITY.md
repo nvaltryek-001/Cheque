@@ -7,10 +7,11 @@ and tested; the list of what is *not* done (end of this page) must be worked thr
 
 | Concern | Control |
 |---|---|
-| Authentication | Signed, time-limited bearer tokens (itsdangerous, 8 h). Tokens embed a per-user version: sign-out, password change/reset and deactivation revoke all of them. Werkzeug password hashing. |
+| Authentication | Signed, time-limited bearer tokens (itsdangerous, 8 h). Tokens embed a per-user version: sign-out, password change/reset and deactivation revoke all of them. Werkzeug password hashing. A token is obtained either with a password (administrator sign-in) or with a one-time code mailed to an institutional address; both give the same token. |
+| Sign-in by institutional email | Any `@saividya.ac.in` address (exact domain, strict address syntax) may ask for an 8-digit code; typing an address alone signs nobody in. The code is random, stored only as a keyed hash, single-use, expires after 10 minutes, is burned after 5 wrong tries, is rate-limited per address and per client, and wrong codes feed the same persisted throttle as wrong passwords. Answers never reveal whether an account exists. Codes are never returned by the API, logged or audited (except in the development-only `log` delivery mode, which warns at start-up). New accounts are *awaiting approval*: signed in, but every data endpoint answers 403 until an administrator gives a role. Email accounts have no usable password and the server refuses to set one. Details, limits and settings: `docs/AUTHENTICATION.md`. |
 | Sign-in brute force | Failed sign-ins are remembered in SQLite (survive restarts, shared by all threads). A *(client IP, username)* pair is blocked after `CV_LOGIN_MAX_ATTEMPTS` (5) failures and a client IP after `CV_LOGIN_IP_MAX_ATTEMPTS` (20) failures across all usernames (password spraying), for `CV_LOGIN_LOCK_SECONDS` (300). While blocked the password is not even checked. Unknown usernames are throttled and answered exactly like real ones. There is **no account-wide lock**: the earlier design let anyone who knew the username lock the administrator out. HTTP 429 with `Retry-After`; `python manage.py unlock-logins` clears all blocks. Change-password attempts are throttled the same way. |
 | Passwords | At least `CV_MIN_PASSWORD_LENGTH` characters (default 8, the Render blueprint sets 12), letters mixed with digits/symbols, a short list of common passwords and the username itself are refused, a new password must differ from the current one. The first admin password taken from `CV_ADMIN_PASSWORD` is checked against the same rules at start-up (the server refuses to start with a weak one). |
-| Authorization | Every endpoint declares allowed roles. Enrollment, specimen changes, users, settings, dataset import, training and deletion of verifications are admin-only. Auditors are read-only. |
+| Authorization | Every endpoint declares allowed roles. Enrollment, specimen changes, users, settings, dataset import, training and deletion of verifications are admin-only. Auditors are read-only. An account that is awaiting approval is refused by every endpoint except `/api/auth/me` and `/api/auth/logout` (a test walks the whole route table to prove it). |
 | Unauthenticated enrollment | Impossible: specimen upload requires an admin token. |
 | Biometric data | Specimen and query images are served only to admin/operator through authenticated endpoints; each specimen view is written to the audit log. No public static route exposes storage. |
 | Uploads | Size limit (413), extension allow-list, magic-byte check, **pixel limit read from the file header before decoding** (`CV_MAX_IMAGE_PIXELS`, default 25 million, 413 `image_too_large`; a decompression-bomb PNG that took 968 MB of memory is now refused with ≈111 MB peak), OpenCV's own decoder limit as a second line, full decode, dimension checks; stored under UUID names; the client filename is never used as a path. |
@@ -48,10 +49,17 @@ values trigger some of them by design.
   sign-in throttle (per client, spraying, expiry, no account lock-out, audit entries without leaked text),
   per-user rate limits, password policy incl. the first admin, response headers incl. HSTS over a simulated
   proxy, CORS allow-list, `.env` parsing.
+* `backend/tests/test_email_login.py` – the address rule (valid and malicious addresses), the full email flow, single use,
+  expiry, attempt and request limits, no account enumeration, secrecy of codes in the database, logs and audit log,
+  roles and approval, the route-table walk for unapproved accounts, SMTP delivery against a local fake SMTP server
+  (STARTTLS required, unencrypted remote servers refused, unreachable server), and in-place upgrade of an older database.
+* `backend/tests/test_frontend_theme.py` – the visual refresh keeps the strict policy: no inline styles, no external fonts,
+  images or `data:` URLs, fonts shipped with their licence, text and control contrast, reduced-motion coverage.
 * `backend/tests/test_prepush_audit.py` – the audit against throw-away repositories.
 * `backend/tests/browser_check.py` – headless Chromium against a running server: no policy violations on any
   page, authenticated images and dynamic styles still work, and the policy is really enforced (inline script,
-  `eval`, inline `style` attribute, foreign image and foreign `fetch` are blocked).
+  `eval`, inline `style` attribute, foreign image and foreign `fetch` are blocked). With `--email-log` it also drives
+  the email sign-in in the browser (other domain refused, wrong code counted, waiting page, approval, sign-out).
   Note: this was run against an esbuild bundle of the same sources because Vite could not be installed in the
   build environment; CI builds with Vite and the Docker job checks the served headers again.
 * The Docker CI job checks headers on the real container, HSTS and the forwarded client address behind one
@@ -62,10 +70,14 @@ values trigger some of them by design.
 * **Tokens live in `sessionStorage`** (tab-scoped, 8 h, revocable). With the strict CSP there is no inline or
   third-party script that could read them, but an XSS bug in the app itself could. Moving to HttpOnly,
   SameSite cookies needs CSRF protection and changes for every API client – recommended together with SSO.
-* **No MFA / SSO.** A bank deployment should put the app behind its identity provider.
+* **No MFA / SSO.** A bank deployment should put the app behind its identity provider. The emailed code proves control of a
+  mailbox, not who is at the keyboard: whoever can read a user's mail (compromised, shared or forwarded mailbox) can sign
+  in as that user, so the application is only as strong as the institution's mail security. Real mail delivery has not
+  been tried from the development environment (it cannot send mail); the SMTP path is tested against a local fake server.
 * **No encryption at rest** by the application: use an encrypted volume; file modes are 600.
 * A distributed guessing attack from many addresses is not stopped by per-address throttling: strong passwords,
-  MFA and a WAF are needed. The sign-in throttle is shared through SQLite; the rate limiter is per process.
+  MFA and a WAF are needed. Likewise nothing stops someone from asking many institutional mailboxes for codes (each person only receives
+  unexpected mail); a WAF or CAPTCHA in front of `/api/auth/email/request` is the usual answer. The sign-in throttle is shared through SQLite; the rate limiter is per process.
 * `pip-audit`/`npm audit` could not run in the build environment (package registries blocked), so **no
   dependency vulnerability result exists yet**; the first CI run produces it. `package-lock.json` does not exist
   yet for the same reason – the CI job `dependency-audit` uploads a generated one; commit it and switch the

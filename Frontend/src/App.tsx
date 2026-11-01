@@ -1,8 +1,10 @@
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "./auth";
-import { Icon } from "./components/Icon";
-import { Button, errText } from "./components/ui";
+import { Avatar, Brand, Icon } from "./components/Icon";
+import { Button } from "./components/ui";
+import { displayName, ROLE_LABEL } from "./identity";
 import { navigate, useRoute } from "./router";
+import Login, { Pending } from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ChequeWorkspace from "./pages/ChequeWorkspace";
 import ChequeDetail from "./pages/ChequeDetail";
@@ -36,56 +38,16 @@ const NAV: { group: string; items: { to: string; label: string; icon: string }[]
   { group: "System", items: [{ to: "/settings", label: "Settings", icon: "settings" }] },
 ];
 
-function Login() {
-  const { login } = useAuth();
-  const [username, setU] = useState("");
-  const [password, setP] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await login(username.trim(), password);
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="login">
-      <form className="login-card" onSubmit={submit}>
-        <div className="brand brand-dark">
-          <span className="brand-mark"><Icon name="cheque" size={20} /></span>
-          <span>ChequeVerify<b>AI</b></span>
-        </div>
-        <h1>Sign in</h1>
-        <p className="muted">Cheque and signature records are restricted to authorised staff.</p>
-        <label>
-          Username
-          <input autoFocus autoComplete="username" value={username} onChange={(e) => setU(e.target.value)} required />
-        </label>
-        <label>
-          Password
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setP(e.target.value)} required />
-        </label>
-        {error && <div className="form-error" role="alert">{error}</div>}
-        <Button kind="primary" type="submit" busy={busy}>Sign in</Button>
-        <p className="tiny muted">First run: the admin password is printed in the backend terminal.</p>
-      </form>
-    </div>
-  );
-}
-
 export default function App() {
   const { user, ready, logout } = useAuth();
   const route = useRoute();
   const [menuOpen, setMenuOpen] = useState(false);
   if (!ready) return <div className="boot"><span className="spinner spinner-lg" /></div>;
   if (!user) return <Login />;
+  if (user.role === "pending") return <Pending />;
 
+  const who = displayName(user);
+  const role = ROLE_LABEL[user.role] ?? user.role;
   const p = route.parts;
   let page;
   let active = "/" + (p[0] ?? "");
@@ -108,10 +70,7 @@ export default function App() {
   return (
     <div className={`shell${menuOpen ? " menu-open" : ""}`}>
       <aside className="side">
-        <div className="brand">
-          <span className="brand-mark"><Icon name="cheque" size={20} /></span>
-          <span>ChequeVerify<b>AI</b></span>
-        </div>
+        <Brand tone="dark" />
         <nav aria-label="Main">
           {NAV.map((g) => (
             <div className="nav-group" key={g.group}>
@@ -132,11 +91,11 @@ export default function App() {
           ))}
         </nav>
         <div className="side-foot">
-          <div className="who">
-            <Icon name="user" />
-            <div>
-              <div className="who-name">{user.full_name || user.username}</div>
-              <div className="who-role">{user.role}</div>
+          <div className="who" title={user.email ?? user.username}>
+            <Avatar name={who} />
+            <div className="who-text">
+              <div className="who-name">{who}</div>
+              <div className="who-role">{who === role ? user.username : role}</div>
             </div>
           </div>
           <button className="icon-btn light" onClick={logout} title="Sign out" aria-label="Sign out">

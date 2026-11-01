@@ -4,7 +4,8 @@ Living document. Update whenever architecture, dependencies, APIs, environment v
 schema, model behaviour or deployment configuration change.
 Status values: NOT STARTED · IN PROGRESS · BLOCKED · TESTING · COMPLETED (completed = implemented **and** verified).
 
-Last updated: 2026-11-01 · branch `chequeverify-v2` · PR #1 (open, not merged) · nothing deployed.
+Last updated: 2026-11-01 · branch `chequeverify-v2` · PR #1 (open, not merged) · nothing deployed · nothing pushed since Phase 1
+(all later work is local commits awaiting the owner's review).
 
 ## 1. What the application does
 Web application for Indian CTS-2010 cheques: upload a cheque → OCR of 10 fields with per-field
@@ -15,7 +16,8 @@ Decision support only; a person confirms every result.
 ## 2. Technology stack
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + TypeScript + Vite (`Frontend/`), no UI library, hash router |
+| Frontend | React 18 + TypeScript + Vite (`Frontend/`), no UI library, hash router; one stylesheet / design system, Inter fonts self-hosted (SIL OFL) |
+| Sign-in | Password (administrator sign-in) or one-time code mailed to an `@saividya.ac.in` address (`docs/AUTHENTICATION.md`) |
 | Backend | Python 3.12 + Flask 3, Waitress in production (`backend/app`) |
 | Database | SQLite (stdlib `sqlite3`), schema in `backend/app/db.py` |
 | OCR | Tesseract 5 (PaddleOCR 3.x adapter, unverified) + trained E-13B MICR template model |
@@ -25,7 +27,7 @@ Decision support only; a person confirms every result.
 
 ## 3. Folder structure
 `backend/app/{api,ocr,signature,services}` · `backend/tests` · `backend/models_store` (bundled models) ·
-`backend/manage.py` (CLI) · `backend/docker_entrypoint.py` · `Frontend/src/{pages,components}` ·
+`backend/manage.py` (CLI) · `backend/docker_entrypoint.py` · `Frontend/src/{pages,components}` · `Frontend/public/fonts` + `Frontend/scripts/subset_fonts.py` ·
 `docs/` · `reports/final/` · `legacy/` (v1, unchanged) · `dataset/`, `signature/` (placeholders; private data is never committed).
 
 ## 4. Running
@@ -50,12 +52,21 @@ Linux/macOS: `./start.sh setup|test|dev`. Docker: `docker build -t chequeverify 
 | `CV_RATE_LIMIT_PER_MIN` | 120 | expensive calls per user per minute (0 = off) |
 | `CV_MAX_IMAGE_PIXELS` | 25000000 | decoded-size limit, checked from the header before decoding |
 | `CV_HSTS_MAX_AGE` | 31536000 | HSTS, sent only on HTTPS (0 = never) |
+| `CV_EMAIL_DELIVERY` | empty = email sign-in off | `smtp` (real mail), `log` (development only), `memory` (tests) |
+| `CV_SMTP_HOST`, `CV_SMTP_PORT`, `CV_SMTP_SECURITY`, `CV_SMTP_USER`, `CV_SMTP_FROM` | -, 587, `starttls`, -, - | mail server for the codes |
+| `CV_SMTP_PASSWORD` | - | **secret**, environment only, read when a mail is sent |
+| `CV_EMAIL_DOMAINS` | `saividya.ac.in` | exact domains that may sign in by email (no list of people) |
+| `CV_EMAIL_DEFAULT_ROLE` | `pending` | role of a first email sign-in: `pending` (waits for approval), `auditor`, `operator`; never `admin` |
+| `CV_ADMIN_EMAILS` | empty | addresses that become administrators after proving the mailbox (not an allow-list) |
+| `CV_PASSWORD_LOGIN` | `1` | `0` switches username + password sign-in off |
+| `CV_EMAIL_CODE_TTL`, `CV_EMAIL_CODE_ATTEMPTS`, `CV_EMAIL_RESEND_SECONDS`, `CV_EMAIL_REQUESTS_PER_ADDRESS`, `CV_EMAIL_REQUESTS_PER_IP`, `CV_EMAIL_REQUEST_WINDOW` | 600, 5, 30, 5, 20, 900 | code lifetime, wrong tries, resend gap, request limits |
 
 ## 6. API and database
 API reference: `docs/API.md` (≈60 routes, JSON envelope, roles admin/operator/auditor).
 Tables: `users`, `cheques` (machine fields + human corrections kept separately), `signers`, `specimens`
 (+ `session_id`, `source_ref`, `origin`), `enrollment_sessions` (signing day, method, instrument, consent reference),
-`verifications`, `model_runs`, `settings`, `audit_log`, `login_attempts` (sign-in throttle; `backend/app/db.py`).
+`verifications`, `model_runs`, `settings`, `audit_log`, `login_attempts` (sign-in throttle), `login_codes` (email sign-in codes, keyed hashes only);
+`users` gained `email` (unique, case-insensitive) and `pending_approval` (`backend/app/db.py`).
 Older databases are upgraded in place by an additive, idempotent migration at start-up (`db.migrate`).
 
 ## 7. AI/ML workflow (current behaviour)
@@ -110,6 +121,9 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 23 | Genuine-signature collection and enrollment workflow (software) | COMPLETED | Phase 3: signing sessions, independence/readiness rule, same-signing refusal (≥ 98 % aligned ink agreement), batch upload, MATCH cap, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload). 88 new tests (`test_enrollment.py` 63, `test_collection.py` 25), live smoke 28/28, Chromium check 41/41 under the CSP. Protocol: `docs/SIGNATURE_ENROLLMENT.md` |
 | 24 | Real collection of genuine signatures under that protocol | BLOCKED | needs consenting signers, a collector, an encrypted store; target ≥ 30 signers × ≥ 10 signatures on ≥ 2 days (see §9) |
 | 25 | Valid signature evaluation protocol (software + rules) | COMPLETED | Phase 4: `app/signature/protocol.py`, `manage.py eval-signatures`, `docs/SIGNATURE_EVALUATION_PROTOCOL.md`. Signer-level splits, references = thinnest ready set from the earliest days, genuine queries strictly later, skilled forgeries need ≥ 3 per signer by ≥ 2 forgers, synthetic edits excluded from every forgery metric, thresholds from validation, test split only with `--final` + ledger, signer-level bootstrap intervals, "not measurable" instead of numbers. 94 tests (`test_protocol.py`); whole backend suite 346 passed / 7 skipped, live smoke 28/28, Chromium check 41/41 under the CSP; synthetic data only |
+| 27 | Passwordless sign-in with an institutional email (`@saividya.ac.in`, no list of people) | TESTING | Backend + UI done: 8-digit mailed code (single use, keyed hash, 10 min, 5 tries, per-address/per-IP limits, shared throttle, no enumeration), accounts created on first use and **awaiting approval** (403 `approval_pending` on every protected route, proven by a route-table walk), `CV_ADMIN_EMAILS` bootstrap, password sign-in kept as "Administrator sign-in" (`CV_PASSWORD_LOGIN`), email accounts cannot get passwords. 94 tests (`test_email_login.py`), mutation-checked; Chromium flow 60/60 under the CSP. **Not verified:** delivery through a real mail provider (sandbox cannot send mail; SMTP path tested against a local fake server). `docs/AUTHENTICATION.md` |
+| 28 | Frontend visual refresh (all pages, one design system) | TESTING | New tokens, typography (self-hosted Inter, OFL), buttons/cards/navigation/icons/dashboard, sign-in hero, waiting page; layout and every feature kept. `test_frontend_theme.py` (40) guards CSP compliance, no external resources, contrast, reduced motion. Checked in Chromium on desktop and phone width (screens reviewed by eye); built with esbuild because Vite is unavailable here, CI builds with Vite. No other browser or real screen reader tested |
+| 29 | Mail service for email sign-in (choice, credentials, deliverability check) | BLOCKED | needs the owner: SMTP host/user/from/password as environment secrets (never in git or chat), then a real sign-in test; until then only the administrator sign-in is offered |
 | 26 | Run the protocol on a real evaluation set | BLOCKED | needs ≥ 30 test signers on ≥ 3 days with forgeries by ≥ 2 other people (task 24 + forgers); until then genuine acceptance and skilled-forgery rejection stay unmeasured |
 
 ## 9. Known bugs / limitations
@@ -148,6 +162,11 @@ Older databases are upgraded in place by an additive, idempotent migration at st
   beyond deleting the signer.
 - Waitress not tested in the build environment (falls back to Flask's threaded server if missing).
 - After sign-out/in the UI stays on the last page.
+- Email sign-in proves control of a mailbox, not identity: anyone who can read a user's mail (compromised, shared or
+  forwarded mailbox) can sign in as that user. No MFA beyond the mailbox, no SSO. Real SMTP delivery, spam filtering and
+  provider limits are untested. Nothing stops someone from asking many institutional mailboxes for codes (WAF / CAPTCHA).
+- With `CV_EMAIL_DEFAULT_ROLE=operator` or `auditor`, everyone with an institutional mailbox sees cheque/signature data at once.
+- The visual refresh was not run through Vite, other browsers or an accessibility audit tool; contrast is checked by test and by eye.
 
 ## 10. Deployment status
 Not deployed. Docker image built and smoke-tested in CI (previous commit). New entrypoint and
@@ -166,3 +185,4 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-11-01 | Phase 2 security: header-based image size limit, persisted sign-in throttle (no account lock), per-user rate limits, password policy, CSP/HSTS/Permissions-Policy/COOP/CORP, CI hardening + Dependabot, `.env` comment parsing fix, pre-push audit tool; real values removed from tests (`57dba7d`) |
 | 2026-11-01 | Phase 3 signature enrollment: `enrollment_sessions` table + specimen provenance columns (additive migration), readiness rule and MATCH cap, same-signing refusal, batch upload, session/readiness API, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload, readiness column, verification banner, settings), `docs/SIGNATURE_ENROLLMENT.md`, manifest template; default `signature.max_specimens_per_signer` 5 → 20 for new installs |
 | 2026-11-01 | Phase 4 signature evaluation protocol: `app/signature/protocol.py`, `manage.py eval-signatures` (`--dataset` status report, `--split val`, `--split test --final`), test-use ledger, suggested thresholds from validation only, claims generated from the report; training report relabelled ("edited copy", `scope` block, `fitted_signer_hashes` in the model); Training page notice; `docs/SIGNATURE_EVALUATION_PROTOCOL.md`, manifest template, `reports/final/SIGNATURE_EVALUATION_STATUS.{md,json}`; "Valid signature evaluation" added to training readiness as BLOCKED |
+| 2026-11-01 | Passwordless institutional-email sign-in (`email_login.py`, `mailer.py`, `login_codes`, `users.email`/`pending_approval`, waiting-for-approval gate, approval in Settings → Users and roles, `docs/AUTHENTICATION.md`) and a frontend visual refresh (design system, fonts, sign-in hero, icons, dashboard stat tiles, decision mix, user table, mobile layout; `test_frontend_theme.py`); browser/live smoke tests extended |

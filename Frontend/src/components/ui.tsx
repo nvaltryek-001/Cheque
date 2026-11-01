@@ -69,13 +69,14 @@ type BtnProps = {
   disabled?: boolean;
   type?: "button" | "submit";
   small?: boolean;
+  wide?: boolean;
   title?: string;
 };
-export function Button({ children, onClick, kind = "secondary", icon, busy, disabled, type = "button", small, title }: BtnProps) {
+export function Button({ children, onClick, kind = "secondary", icon, busy, disabled, type = "button", small, wide, title }: BtnProps) {
   return (
     <button
       type={type}
-      className={`btn btn-${kind}${small ? " btn-sm" : ""}`}
+      className={`btn btn-${kind}${small ? " btn-sm" : ""}${wide ? " btn-wide" : ""}`}
       onClick={onClick}
       disabled={disabled || busy}
       title={title}
@@ -124,9 +125,10 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+export function Empty({ title, children, action, icon = "scan" }: { title: string; children?: ReactNode; action?: ReactNode; icon?: string }) {
   return (
     <div className="state state-empty">
+      <span className="empty-icon"><Icon name={icon} size={20} /></span>
       <strong>{title}</strong>
       {children && <span>{children}</span>}
       {action}
@@ -319,11 +321,14 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: ReactNo
   );
 }
 
-export function Stat({ label, value, tone, hint }: { label: string; value: ReactNode; tone?: "good" | "warn" | "bad" | "info"; hint?: ReactNode }) {
+export function Stat({ label, value, tone, hint, icon }: { label: string; value: ReactNode; tone?: "good" | "warn" | "bad" | "info"; hint?: ReactNode; icon?: string }) {
   return (
     <div className={`stat${tone ? ` stat-${tone}` : ""}`}>
+      <div className="stat-top">
+        {icon && <span className="stat-icon"><Icon name={icon} size={17} /></span>}
+        <span className="stat-label">{label}</span>
+      </div>
       <div className="stat-value">{value}</div>
-      <div className="stat-label">{label}</div>
       {hint && <div className="stat-hint">{hint}</div>}
     </div>
   );

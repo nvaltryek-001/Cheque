@@ -93,10 +93,10 @@ export function OcrDataset() {
         d.total_images === undefined ? <ErrorState message={(d.issues[0]?.message) ?? "Dataset not found"} /> : (
         <>
           <div className="stats">
-            <Stat label="Images" value={d.total_images} hint={Object.entries(d.images_per_split).map(([k, v]) => `${k} ${v}`).join(" · ")} />
-            <Stat label="Corrupted" value={d.corrupted_images.length} tone={d.corrupted_images.length ? "bad" : "good"} />
-            <Stat label="Transcription label files" value={d.annotation_files.length} tone={d.annotation_files.length ? "good" : "warn"} hint="needed for OCR training" />
-            <Stat label="Filenames = cheque no." value={d.filename_is_cheque_number} hint="weak label used for MICR" />
+            <Stat icon="layers" label="Images" value={d.total_images} hint={Object.entries(d.images_per_split).map(([k, v]) => `${k} ${v}`).join(" · ")} />
+            <Stat icon="alert" label="Corrupted" value={d.corrupted_images.length} tone={d.corrupted_images.length ? "bad" : "good"} />
+            <Stat icon="report" label="Transcription label files" value={d.annotation_files.length} tone={d.annotation_files.length ? "good" : "warn"} hint="needed for OCR training" />
+            <Stat icon="info" label="Filenames = cheque no." value={d.filename_is_cheque_number} hint="weak label used for MICR" />
           </div>
           <div className="grid-2">
             <Panel title="Distribution by bank and split"><SplitTable data={d.images_per_bank_and_split} /></Panel>
@@ -133,10 +133,10 @@ export function SignatureDataset() {
         d.genuine_rows === undefined ? <ErrorState message={(d.issues[0]?.message) ?? "Dataset not found"} /> : (
         <>
           <div className="stats">
-            <Stat label="Genuine specimens" value={d.genuine_rows} hint={`${d.unique_signers} signers`} />
-            <Stat label="Synthetic alterations" value={d.altered_rows} hint="stroke edits, not real forgeries" />
-            <Stat label="Specimens per signer" value={Object.keys(d.specimens_per_signer).join(", ")} tone="warn" hint="signer-specific training needs several" />
-            <Stat label="Signer leakage across splits" value={d.signers_in_multiple_splits.length} tone={d.signers_in_multiple_splits.length ? "bad" : "good"} />
+            <Stat icon="signature" label="Genuine specimens" value={d.genuine_rows} hint={`${d.unique_signers} signers`} />
+            <Stat icon="edit" label="Synthetic alterations" value={d.altered_rows} hint="stroke edits, not real forgeries" />
+            <Stat icon="users" label="Specimens per signer" value={Object.keys(d.specimens_per_signer).join(", ")} tone="warn" hint="signer-specific training needs several" />
+            <Stat icon="shield" label="Signer leakage across splits" value={d.signers_in_multiple_splits.length} tone={d.signers_in_multiple_splits.length ? "bad" : "good"} />
           </div>
           <div className="grid-2">
             <Panel title="Genuine specimens by bank and split"><SplitTable data={d.genuine_per_bank_and_split} /></Panel>

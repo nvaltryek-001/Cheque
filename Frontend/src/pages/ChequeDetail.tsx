@@ -184,7 +184,7 @@ export default function ChequeDetail({ id }: { id: number }) {
                       </span>
                     </label>
                     <input id={`f-${k}`} value={edits[k] ?? ""} disabled={!editable} onChange={(e) => setEdits({ ...edits, [k]: e.target.value })}
-                      placeholder={f?.status === "missing" ? "Not detected – enter manually" : ""} />
+                      placeholder={f?.status === "missing" ? "Enter manually" : ""} />
                     {corrected && <div className="tiny muted">Machine read: {machine(k) || "nothing"}</div>}
                     {!corrected && f?.issues?.map((i) => <div className="tiny warn-text" key={i}>{i}</div>)}
                   </div>

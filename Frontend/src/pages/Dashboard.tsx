@@ -1,6 +1,7 @@
 import { api, Decision, ModelStatus } from "../api";
 import { useAuth } from "../auth";
 import { Button, Empty, ErrorState, fmtDate, Loading, PageHead, Panel, Pill, Stat, useAsync } from "../components/ui";
+import { displayName } from "../identity";
 import { navigate } from "../router";
 
 interface Dash {
@@ -13,23 +14,40 @@ interface Dash {
   recent_verifications: { id: number; decision: Decision; score: number; created_at: string; signer_code: string | null }[];
 }
 
+/** How the signature decisions split between match, review and mismatch: a bar plus the counts. */
+function DecisionMix({ v }: { v: Dash["verifications"] }) {
+  const total = v.match + v.review + v.mismatch;
+  return (
+    <>
+      {total > 0 && (
+        <span className="stackbar stackbar-thin" role="img" aria-label={`${v.match} match, ${v.review} review, ${v.mismatch} mismatch`}>
+          <span className="good" style={{ width: `${(100 * v.match) / total}%` }} />
+          <span className="warn" style={{ width: `${(100 * v.review) / total}%` }} />
+          <span className="bad" style={{ width: `${(100 * v.mismatch) / total}%` }} />
+        </span>
+      )}
+      <span>{v.match} match · {v.review} review · {v.mismatch} mismatch</span>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const { user, can } = useAuth();
   const { data, error, loading, reload } = useAsync(() => api<Dash>("/api/dashboard"));
   return (
     <>
       <PageHead
-        title={`Good to see you, ${user?.full_name || user?.username}`}
+        title={`Good to see you, ${user ? displayName(user) : ""}`}
         sub="Live figures from this installation. Nothing here is sample data."
         actions={can("admin", "operator") && <Button kind="primary" icon="upload" onClick={() => navigate("/cheques")}>Verify a cheque</Button>}
       />
       {loading && !data ? <Loading /> : error ? <ErrorState message={error} onRetry={reload} /> : data && (
         <>
           <div className="stats">
-            <Stat label="Cheques processed" value={data.cheques.total} hint={data.avg_processing_ms ? `${(data.avg_processing_ms / 1000).toFixed(1)} s average` : "No cheques yet"} />
-            <Stat label="Waiting for review" value={data.cheques.needs_review} tone={data.cheques.needs_review ? "warn" : undefined} hint={`${data.cheques.reviewed} reviewed`} />
-            <Stat label="Signature checks" value={data.verifications.total} hint={`${data.verifications.match} match · ${data.verifications.review} review · ${data.verifications.mismatch} mismatch`} />
-            <Stat label="Enrolled signers" value={data.enrollment.active_signers} hint={`${data.enrollment.specimens} active specimens`} tone={data.enrollment.specimens ? undefined : "warn"} />
+            <Stat icon="cheque" label="Cheques processed" value={data.cheques.total} hint={data.avg_processing_ms ? `${(data.avg_processing_ms / 1000).toFixed(1)} s average` : "No cheques yet"} />
+            <Stat icon="clock" label="Waiting for review" value={data.cheques.needs_review} tone={data.cheques.needs_review ? "warn" : undefined} hint={`${data.cheques.reviewed} reviewed`} />
+            <Stat icon="signature" label="Signature checks" value={data.verifications.total} hint={<DecisionMix v={data.verifications} />} />
+            <Stat icon="users" label="Enrolled signers" value={data.enrollment.active_signers} hint={`${data.enrollment.specimens} active specimen${data.enrollment.specimens === 1 ? "" : "s"}`} tone={data.enrollment.specimens ? undefined : "warn"} />
           </div>
           <div className="grid-2">
             <Panel title="Recent cheques" actions={<Button small kind="ghost" onClick={() => navigate("/cheques")}>Open workspace</Button>}>

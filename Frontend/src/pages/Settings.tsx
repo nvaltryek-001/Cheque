@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, apiPage, AuditEntry, del, patch, post, put, Role, setToken, User } from "../api";
 import { useAuth } from "../auth";
+import { Icon } from "../components/Icon";
 import { Button, Confirm, ErrorState, errText, fmtDate, Loading, Modal, PageHead, Pagination, Panel, Pill, useAsync, useToast } from "../components/ui";
 
 type S = Record<string, number | boolean | null>;
@@ -75,7 +76,7 @@ function ThresholdSettings() {
 }
 
 function Users() {
-  const { user } = useAuth();
+  const { user, config } = useAuth();
   const toast = useToast();
   const list = useAsync(() => api<User[]>("/api/users"));
   const [adding, setAdding] = useState(false);
@@ -86,27 +87,47 @@ function Users() {
   const [busy, setBusy] = useState(false);
   if (list.loading && !list.data) return <Loading />;
   if (list.error) return <ErrorState message={list.error} />;
+  const waiting = list.data?.filter((u) => u.role === "pending" && u.is_active).length ?? 0;
   return (
     <>
+      {waiting > 0 && (
+        <div className="notice notice-warn" role="status">
+          <Icon name="clock" size={16} />
+          <span><b>{waiting === 1 ? "1 person is" : `${waiting} people are`} waiting for approval.</b> Choose a role in the Role column to let them in.</span>
+        </div>
+      )}
+      {config.email_signin && waiting === 0 && (
+        <div className="notice" role="note">
+          <Icon name="mail" size={16} />
+          <span>Anyone with an @{config.email_domain} address can sign in by email. They appear here as awaiting approval until you give them a role.</span>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th /></tr></thead>
           <tbody>
             {list.data?.map((u) => (
-              <tr key={u.id}>
-                <td><b>{u.username}</b>{u.id === user?.id && <span className="tiny muted"> (you)</span>}</td>
+              <tr key={u.id} className={u.role === "pending" ? "row-attn" : undefined}>
+                <td>
+                  <span className="who-cell">
+                    <span title={u.email ? "Signs in with an email code" : "Signs in with a password"}><Icon name={u.email ? "mail" : "key"} size={15} className="muted-icon" /></span>
+                    <b>{u.username}</b>{u.id === user?.id && <span className="tiny muted"> (you)</span>}
+                  </span>
+                </td>
                 <td>{u.full_name || "—"}</td>
                 <td>
                   <select value={u.role} disabled={u.id === user?.id} aria-label={`Role of ${u.username}`} onChange={async (e) => {
-                    try { await patch(`/api/users/${u.id}`, { role: e.target.value }); list.reload(); toast("success", "Role updated"); } catch (x) { toast("error", errText(x)); }
+                    try { await patch(`/api/users/${u.id}`, { role: e.target.value }); list.reload(); toast("success", e.target.value === "pending" ? "Access withdrawn" : "Role updated"); } catch (x) { toast("error", errText(x)); }
                   }}>
+                    {u.role === "pending" && <option value="pending">awaiting approval</option>}
                     <option value="admin">admin</option><option value="operator">operator</option><option value="auditor">auditor</option>
+                    {u.role !== "pending" && u.email && <option value="pending">withdraw access</option>}
                   </select>
                 </td>
-                <td><Pill value={u.is_active ? "active" : "inactive"} /></td>
+                <td>{u.is_active && u.role === "pending" ? <Pill value="review" label="awaiting approval" /> : <Pill value={u.is_active ? "active" : "inactive"} />}</td>
                 <td className="nowrap">{fmtDate(u.last_login_at)}</td>
                 <td className="row-actions">
-                  <Button small onClick={() => { setPw(""); setResetting(u); }}>Reset password</Button>
+                  {!u.email && <Button small onClick={() => { setPw(""); setResetting(u); }}>Reset password</Button>}
                   {u.id !== user?.id && <Button small onClick={async () => {
                     try { await patch(`/api/users/${u.id}`, { is_active: !u.is_active }); list.reload(); } catch (x) { toast("error", errText(x)); }
                   }}>{u.is_active ? "Disable" : "Enable"}</Button>}
@@ -187,7 +208,7 @@ function AuditLog() {
           <thead><tr><th>When</th><th>User</th><th>Action</th><th>Record</th><th>Detail</th></tr></thead>
           <tbody>
             {list.data?.data.map((a) => (
-              <tr key={a.id}><td className="nowrap">{fmtDate(a.created_at)}</td><td>{a.username ?? "system"}</td><td>{a.action}</td><td>{a.entity ? `${a.entity} ${a.entity_id ?? ""}` : "—"}</td><td className="tiny muted clip">{a.detail}</td></tr>
+              <tr key={a.id}><td className="nowrap">{fmtDate(a.created_at)}</td><td>{a.username ?? "system"}</td><td>{a.action}</td><td>{a.entity ? `${a.entity} ${a.entity_id ?? ""}` : "—"}</td><td className="tiny muted clip" title={a.detail || undefined}>{a.detail}</td></tr>
             ))}
           </tbody>
         </table>
@@ -198,13 +219,21 @@ function AuditLog() {
 }
 
 export default function Settings() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const status = useAsync(() => api<{ version: string; datasets: { ocr: boolean; signature: boolean } }>("/api/system/status"));
   return (
     <>
       <PageHead title="Settings" sub={status.data ? `ChequeVerify AI ${status.data.version} · OCR dataset ${status.data.datasets.ocr ? "found" : "missing"} · signature dataset ${status.data.datasets.signature ? "found" : "missing"}` : undefined} />
       <Panel title="Verification settings"><ThresholdSettings /></Panel>
-      <Panel title="Your password"><ChangePassword /></Panel>
+      {user?.email ? (
+        <Panel title="Your sign-in">
+          <p className="panel-text">
+            You sign in with <b>{user.email}</b> using a one-time code sent to that address, so there is no password to change.
+          </p>
+        </Panel>
+      ) : (
+        <Panel title="Your password"><ChangePassword /></Panel>
+      )}
       {can("admin") && <Panel title="Users and roles"><Users /></Panel>}
       {can("admin", "auditor") && <Panel title="Audit log"><AuditLog /></Panel>}
     </>

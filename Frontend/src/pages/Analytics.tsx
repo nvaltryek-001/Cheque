@@ -30,10 +30,10 @@ export default function Analytics() {
       ) : (
         <>
           <div className="stats">
-            <Stat label="Cheques" value={data.cheques} />
-            <Stat label="Manual field corrections" value={data.manual_corrections} hint="each one is a labelled example for future evaluation" />
-            <Stat label="Signature decisions" value={Object.values(data.decisions).reduce((a, b) => a + b, 0)} />
-            <Stat label="Reviewer agreed with system" value={agreeTotal ? `${Math.round((100 * data.reviewer_agreement.agree) / agreeTotal)}%` : "—"} hint={agreeTotal ? `${agreeTotal} reviewed MATCH/MISMATCH results` : "no reviewed decisions yet"} />
+            <Stat icon="cheque" label="Cheques" value={data.cheques} />
+            <Stat icon="edit" label="Manual field corrections" value={data.manual_corrections} hint="each one is a labelled example for future evaluation" />
+            <Stat icon="signature" label="Signature decisions" value={Object.values(data.decisions).reduce((a, b) => a + b, 0)} />
+            <Stat icon="shieldcheck" label="Reviewer agreed with system" value={agreeTotal ? `${Math.round((100 * data.reviewer_agreement.agree) / agreeTotal)}%` : "—"} hint={agreeTotal ? `${agreeTotal} reviewed MATCH/MISMATCH results` : "no reviewed decisions yet"} />
           </div>
           <Panel title="Field extraction status">
             <div className="table-wrap">

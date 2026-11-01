@@ -35,12 +35,15 @@ Banks still key in cheque details by hand and compare signatures by eye. This pr
 | Datasets | Live audits of both datasets; manifest-based browser |
 | Models | Readiness assessment; background training/evaluation jobs with history and metrics |
 | Reports | Per-cheque PDF; CSV exports (cheques, verifications, signers, audit log); audit/evaluation report downloads |
-| Security | Token auth, 3 roles, per-client sign-in throttling, per-user rate limits, password policy, token revocation, upload validation by content (size and pixel limits before decoding), CSP/HSTS and other headers, private storage, audited biometric access, masked account numbers, pre-push audit for private data |
+| Security | Token auth (password or mailed one-time code for `@saividya.ac.in` addresses, new accounts wait for approval), 3 roles, per-client sign-in throttling, per-user rate limits, password policy, token revocation, upload validation by content (size and pixel limits before decoding), CSP/HSTS and other headers, private storage, audited biometric access, masked account numbers, pre-push audit for private data |
 
 ### Screens
 Dashboard · Cheque verification · Cheque detail · Signature verification · Signature enrollment ·
 Signer detail · Batch processing · OCR dataset · Signature dataset · Model training · Analytics ·
-Verification history · Reports · Settings (thresholds, users, password, audit log).
+Verification history · Reports · Settings (thresholds, users and roles, password, audit log), plus the sign-in and
+waiting-for-approval pages. The interface uses one design system (midnight-ink navigation, ultramarine actions,
+an aqua scan accent only where images are analysed, self-hosted Inter fonts under the SIL OFL) described in
+`docs/ARCHITECTURE.md`.
 
 ## 3. Architecture
 
@@ -169,8 +172,14 @@ Linux/macOS: `./start.sh setup`, `./start.sh test`, `./start.sh`, `./start.sh de
 (`sudo apt install tesseract-ocr` for the OCR engine).
 
 **First sign-in.** On first start the backend creates user `admin` and prints a random password in
-the terminal (or uses `CV_ADMIN_PASSWORD` from `.env`). Change it under Settings → Your password, then
-create operator/auditor accounts under Settings → Users.
+the terminal (or uses `CV_ADMIN_PASSWORD` from `.env`). Choose *Administrator sign-in* on the login screen,
+change the password under Settings → Your password, then create operator/auditor accounts under Settings → Users.
+
+**Sign in by institutional email.** People with an `@saividya.ac.in` address sign in without a password: they enter
+the address, then the 8-digit code that is emailed to them. No list of people is kept; the first sign-in creates an
+account that waits for an administrator to give it a role (Settings → Users and roles). It needs a mail server
+(`CV_EMAIL_DELIVERY` and `CV_SMTP_*`); for local trials `CV_EMAIL_DELIVERY=log` prints the code in the server log.
+How it works, what it does and does not prove, and how to set it up: `docs/AUTHENTICATION.md`.
 
 Suggested first steps in the app: Signature enrollment → *Import from dataset* (creates the 120 signers),
 then Cheque verification → upload a cheque from `dataset/test/...` → Verify signature.
@@ -195,6 +204,8 @@ The previous implementation (v1) is preserved unchanged under `legacy/`.
 | `CV_TESSERACT_CMD` | PATH / `C:\Program Files\Tesseract-OCR\tesseract.exe` | Tesseract binary |
 | `CV_SECRET_KEY` | random, stored in `backend/instance/secret_key` | Token signing key |
 | `CV_ADMIN_PASSWORD` | random, printed once | First admin password |
+| `CV_EMAIL_DELIVERY`, `CV_SMTP_HOST`, `CV_SMTP_PORT`, `CV_SMTP_SECURITY`, `CV_SMTP_USER`, `CV_SMTP_FROM`, `CV_SMTP_PASSWORD` | off | Mail delivery for email sign-in (`smtp`; `log` is for development only). The SMTP password is a secret: environment only |
+| `CV_EMAIL_DOMAINS`, `CV_EMAIL_DEFAULT_ROLE`, `CV_ADMIN_EMAILS`, `CV_PASSWORD_LOGIN` | `saividya.ac.in`, `pending`, empty, `1` | Who may sign in by email, what a first sign-in becomes, which addresses become administrators, whether password sign-in stays on (see `docs/AUTHENTICATION.md`) |
 | `CV_MAX_UPLOAD_MB` | 10 | Upload limit |
 | `CV_CORS_ORIGINS` | localhost:5173 | Only needed when the UI is served from another origin |
 | `CV_TOKEN_MAX_AGE` | 28800 | Session lifetime (seconds) |
@@ -210,7 +221,7 @@ python manage.py train-signature          # fusion (train) + thresholds (val) + 
 python manage.py eval-ocr --split test    # field-extraction evaluation
 python manage.py create-user alice --role operator
 python manage.py reset-password admin
-python -m pytest -q                       # 54 backend tests
+python -m pytest -q                       # the backend test suite
 ```
 The same jobs can be started from the Model training screen (admin).
 

@@ -8,7 +8,8 @@ and are recorded in `model_runs`.
 
 ## Data
 SQLite (`backend/instance/chequeverify.db`) tables: `users`, `cheques`, `signers`, `specimens`,
-`verifications`, `model_runs`, `settings`, `audit_log`. Images live in `backend/instance/storage/<area>/`
+`verifications`, `model_runs`, `settings`, `audit_log`, `login_attempts` (persisted sign-in throttle) and `login_codes`
+(one-time email sign-in codes, stored as keyed hashes only). Images live in `backend/instance/storage/<area>/`
 under random UUID names (`cheques`, `crops`, `specimens`, `specimens_processed`, `queries`).
 The original datasets are only read.
 
@@ -43,7 +44,29 @@ The original datasets are only read.
   MATCH / REVIEW / MISMATCH, downgrades MATCH to REVIEW on poor query quality, explains the decision.
 - `training` – pair construction, training, threshold selection, evaluation (see MODEL_EVALUATION.md).
 
+## Sign-in (`app/services/email_login.py`, `mailer.py`, `auth.py`)
+Two ways to a token: username + password, or a one-time code mailed to an institutional address
+(`@saividya.ac.in` by default, no list of permitted people). `email_login` validates the address, issues and
+checks codes (keyed hash, single use, attempt and request limits) and creates the account on first use;
+`mailer` delivers the code (SMTP with STARTTLS, a development-only log mode, an in-memory outbox for tests).
+New email accounts are stored with the least-privileged role plus a `pending_approval` flag; the API reports
+them as role `pending` and `login_required` refuses them everywhere except `/api/auth/me` and `/api/auth/logout`.
+See `docs/AUTHENTICATION.md`.
+
 ## Frontend (`Frontend/src`)
 `api.ts` (fetch wrapper, types), `auth.tsx` (session), `router.ts` (hash router), `components/ui.tsx`
 (buttons, panels, states, toasts, modal, pagination, authenticated images, file drop, decision stamp),
-`pages/*` (one file per screen). Tokens are kept in `sessionStorage` (cleared when the tab closes).
+`pages/*` (one file per screen; `pages/Login.tsx` holds the sign-in views and the waiting-for-approval page),
+`identity.ts` (display name and initials from an address, role labels). Tokens are kept in `sessionStorage`
+(cleared when the tab closes).
+
+### Visual design
+`styles.css` is one stylesheet built on CSS custom properties: a midnight-ink navigation and sign-in hero, a pale
+paper canvas, ultramarine for actions and an aqua "scan" accent that appears only where the system is reading an
+image (viewfinder corners around analysed cheques, detection boxes in the sign-in drawing). Green, amber and red are
+reserved for decisions and statuses. Text is Inter (body) and Inter Display (headings), subsetted to Latin and
+served from `/fonts` under the SIL Open Font License (`Frontend/public/fonts/OFL.txt`; `Frontend/scripts/subset_fonts.py`
+regenerates the files). Nothing is loaded from another origin and there are no inline styles, so the strict
+Content-Security-Policy still holds; `backend/tests/test_frontend_theme.py` guards that, the contrast ratios and
+reduced-motion support. Motion is limited to the one-time scan on the sign-in screen, the decision stamp and
+loading indicators.

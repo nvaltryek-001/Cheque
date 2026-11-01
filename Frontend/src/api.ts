@@ -66,7 +66,8 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
     } catch {
       /* non-JSON error */
     }
-    if (res.status === 401 && path !== "/api/auth/login" && onUnauthorized) onUnauthorized();
+    // a wrong password or code is an answer to the sign-in form, not an expired session
+    if (res.status === 401 && !path.startsWith("/api/auth/login") && !path.startsWith("/api/auth/email/") && onUnauthorized) onUnauthorized();
     throw new ApiError(res.status, code, message, details);
   }
   return res;
@@ -113,15 +114,34 @@ export async function download(path: string, fallbackName: string) {
 }
 
 // ------------------------------------------------------------------ types
-export type Role = "admin" | "operator" | "auditor";
+/** "pending" = signed in with an institutional email, waiting for an administrator to give the account a role. */
+export type Role = "admin" | "operator" | "auditor" | "pending";
 export interface User {
   id: number;
   username: string;
+  email: string | null;
   full_name: string;
   role: Role;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
+}
+/** What the server offers on the sign-in screen (GET /api/auth/config, no sign-in needed). */
+export interface AuthConfig {
+  email_signin: boolean;
+  email_domain: string | null;
+  email_domains: string[];
+  password_signin: boolean;
+  code_length: number;
+  code_ttl_seconds: number;
+  resend_seconds: number;
+}
+export interface CodeRequested {
+  sent: boolean;
+  email: string;
+  expires_in: number;
+  resend_after: number;
+  code_length: number;
 }
 export type FieldStatus = "ok" | "review" | "missing";
 export interface Field {

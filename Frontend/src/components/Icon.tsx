@@ -1,4 +1,6 @@
-// Small stroke icon set (no icon dependency). 24x24 grid, 1.8px stroke.
+import { initials } from "../identity";
+
+// Small stroke icon set (no icon dependency). 24x24 grid, 1.75px round stroke.
 const PATHS: Record<string, string> = {
   dashboard: "M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 7h6V4h-6z",
   cheque: "M3 7h18v10H3zM6 11h7M6 14h4M16 14h2",
@@ -29,6 +31,18 @@ const PATHS: Record<string, string> = {
   menu: "M4 6h16M4 12h16M4 18h16",
   chevron: "M9 6l6 6-6 6",
   user: "M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z",
+  users: "M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.9M15 4.2a3.5 3.5 0 0 1 0 6.6",
+  mail: "M4 6h16v12H4zM4 7.5l8 6 8-6",
+  key: "M11 12.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0zM11 12.5h10M17 12.5v3M20.5 12.5v2",
+  lock: "M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3M12 15v2",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
+  sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
+  shieldcheck: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM8.5 12l2.5 2.5 4.5-5",
+  arrowleft: "M19 12H5M11 6l-6 6 6 6",
+  arrowright: "M5 12h14M13 6l6 6-6 6",
+  scan: "M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10",
+  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5",
 };
 
 export type IconName = keyof typeof PATHS;
@@ -42,7 +56,7 @@ export function Icon({ name, size = 18, className }: { name: string; size?: numb
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.8}
+      strokeWidth={1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -50,4 +64,30 @@ export function Icon({ name, size = 18, className }: { name: string; size?: numb
       <path d={PATHS[name] ?? PATHS.alert} />
     </svg>
   );
+}
+
+/** The product mark: a viewfinder around a tick, i.e. "looked at and checked". Colours come from the stylesheet. */
+export function BrandMark({ large }: { large?: boolean }) {
+  return (
+    <span className={`brand-mark${large ? " brand-mark-lg" : ""}`} aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="100%" height="100%" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path className="bm-frame" d="M9 13V11.5A2.5 2.5 0 0 1 11.5 9H13M19 9h1.5a2.5 2.5 0 0 1 2.5 2.5V13M23 19v1.5a2.5 2.5 0 0 1-2.5 2.5H19M13 23h-1.5A2.5 2.5 0 0 1 9 20.5V19" />
+        <path className="bm-tick" d="M12.8 16.4l2.5 2.5 4.6-5.3" />
+      </svg>
+    </span>
+  );
+}
+
+export function Brand({ tone = "light" }: { tone?: "light" | "dark" }) {
+  return (
+    <div className={`brand brand-${tone}`}>
+      <BrandMark />
+      <span className="brand-name">ChequeVerify<b>AI</b></span>
+    </div>
+  );
+}
+
+/** Round initials badge for a person. */
+export function Avatar({ name, large }: { name: string; large?: boolean }) {
+  return <span className={`avatar${large ? " avatar-lg" : ""}`} aria-hidden="true">{initials(name)}</span>;
 }
