@@ -30,6 +30,7 @@ Image endpoints also require the token – the frontend fetches them as blobs.
 | **Cheques** ||||
 | POST | `/api/cheques` | admin, operator | multipart `file` → OCR, validation, signature detection. Returns the full record |
 | POST | `/api/cheques/batch` | admin, operator | multipart `files` (≤ 20) |
+| POST | `/api/cheques/from-sample` | admin, operator | JSON `{split, bank, filename}` → processes one image of the server's OCR dataset folder (a demo sample) exactly like an upload. The image must appear in the folder listing and lie inside the folder after links are resolved (`404` otherwise; `400` for a name with anything but letters, digits, `_ . -`); the file is only read. Same limits as an upload (`413`, `415`, `503 busy`) |
 | GET | `/api/cheques?q=&status=&page=&per_page=` | any | List (account numbers masked) |
 | GET | `/api/cheques/{id}` | any | Full record: `fields`, `corrected`, `final`, `validation`, `quality`, `verifications`, `suggested_signer` |
 | PATCH | `/api/cheques/{id}` | admin, operator | `{corrections: {field: value or null}, status, notes}` – machine values are never overwritten |

@@ -6,6 +6,10 @@
 > alteration check. Section 2's "fill rate" figures measure presence, not correctness – section 2b
 > measures correctness against hand-transcribed labels.
 >
+> **Update 2026-11-01 (final code).** The OCR "test" columns of section 2 (fill rates, amount consistency, date validity) were produced
+> by an earlier version of the extraction code. On the final code every field is read on all 20 test cheques, the amount in words agrees with the figures on 20 of 20 and
+> the date is valid on 20 of 20; accuracy against the labels is 196 of 200 fields (section 2b). Current figures: `ocr_evaluation_test.json` and `DATASET_TEST_RESULTS.md`.
+>
 > **Update 2026-11-01 (signature evaluation protocol, `docs/SIGNATURE_EVALUATION_PROTOCOL.md`).** Terminology only; no number in
 > this report was recomputed. The script-generated stroke edits of a specimen are called *edited copies* (earlier text said
 > "synthetic forgery"): they are not attempts by another person, so nothing here is a forgery-detection rate. The code now

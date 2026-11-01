@@ -180,8 +180,8 @@ python manage.py restore-backup FILE --into /restore   # a new, empty folder; ve
 
 ## Continuous integration
 `.github/workflows/ci.yml` runs on every push and weekly. Jobs: backend tests (dataset tests skip
-automatically), frontend type-check + Vite build, `dependency-audit` (`pip-audit`, `npm audit`, uploads a
-generated `package-lock.json`), `private-data-audit` (`scripts/prepush_audit.py --base origin/main`) and a
+automatically), frontend type-check + Vite build, `dependency-audit` (`pip-audit`; `npm audit --omit=dev` blocks, build-tool advisories are
+reported as warnings; uploads a generated `package-lock.json`), `private-data-audit` (`scripts/prepush_audit.py --base origin/main`) and a
 Docker job (build, live smoke test, a fingerprint of all stored data, unprivileged user, private files, security headers,
 a restart, a clean `docker stop` in under 8 seconds with exit code 0, a new container on the same disk compared with the
 fingerprint, a SIGKILL and restart followed by a database integrity check, HSTS and client address behind one proxy hop,

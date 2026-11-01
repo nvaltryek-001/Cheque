@@ -1,8 +1,9 @@
 """Turn `npm audit --json` (read from standard input) into GitHub Actions annotations.
 
-    npm audit --json | python3 scripts/npm_audit_annotations.py [LEVEL]
+    npm audit --json | python3 scripts/npm_audit_annotations.py [LEVEL [KIND]]
 
-Prints one `::error title=npm advisory::...` line per package at or above LEVEL (default: high), naming the package,
+Prints one `::KIND title=npm advisory::...` line per package at or above LEVEL (default: high; KIND is error, warning
+or notice, default error), naming the package,
 the affected versions, the advisory titles and the fix npm offers. Annotations can be read without opening the job
 log. Nothing private is involved: advisories are public information about public packages.
 """
@@ -34,14 +35,15 @@ def lines(report: dict, level: str = "high") -> list[str]:
 
 def main() -> int:
     level = sys.argv[1] if len(sys.argv) > 1 else "high"
+    kind = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] in ("error", "warning", "notice") else "error"
     try:
         report = json.load(sys.stdin)
     except ValueError as exc:
-        print("::error title=npm advisory::npm audit did not return JSON (%s)" % exc)
+        print("::%s title=npm advisory::npm audit did not return JSON (%s)" % (kind, exc))
         return 0
     found = lines(report, level)
     for text in found:
-        print("::error title=npm advisory::" + text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+        print("::%s title=npm advisory::" % kind + text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
     if not found:
         print("::notice title=npm advisory::no package at level %s or above in the JSON report (keys: %s)" % (level, ", ".join(sorted(report))[:300]))
     return 0

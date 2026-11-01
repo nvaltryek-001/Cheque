@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import uuid
+from pathlib import Path
 
 from flask import Blueprint, current_app, g, request, send_file
+from werkzeug.datastructures import FileStorage
 
 from ..db import execute, now_iso, query, row_to_dict
 from ..ocr.fields import FIELD_ORDER
+from ..services.datasets import discover_ocr_images
 from ..services.limits import image_slot
 from ..services import audit, cheques, storage
 from ..services.auth import login_required
@@ -28,6 +32,16 @@ def _get(cid: int):
     return row
 
 
+def _created(cid: int, dup) -> dict:
+    """The response for a newly processed cheque (an upload or a dataset sample)."""
+    out = cheques.serialize(_get(cid))
+    out["duplicate_of"] = dup["id"] if dup else None
+    signer = cheques.match_signer_by_account(out["final"]["account_number"])
+    out["suggested_signer"] = {"id": signer["id"], "signer_code": signer["signer_code"],
+                               "full_name": signer["full_name"]} if signer else None
+    return out
+
+
 @bp.post("/api/cheques")
 @login_required("admin", "operator")
 @rate_limited()
@@ -37,12 +51,52 @@ def upload():
     dup = query("SELECT id FROM cheques WHERE sha256=?", (storage.sha256(data),), one=True)
     cid = cheques.create_from_upload(data, img, name, g.user["id"])
     audit.record("cheque.create", "cheque", cid, {"file": name})
-    out = cheques.serialize(_get(cid))
-    out["duplicate_of"] = dup["id"] if dup else None
-    signer = cheques.match_signer_by_account(out["final"]["account_number"])
-    out["suggested_signer"] = {"id": signer["id"], "signer_code": signer["signer_code"],
-                               "full_name": signer["full_name"]} if signer else None
-    return ok(out, 201)
+    return ok(_created(cid, dup), 201)
+
+
+_SAMPLE_NAME = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+
+@bp.post("/api/cheques/from-sample")
+@login_required("admin", "operator")
+@rate_limited()
+@image_slot
+def from_sample():
+    """Process one image of this server's OCR dataset folder (a demo sample) exactly like an upload.
+
+    The image is identified by split, bank and file name and must appear in the folder listing - a path from the client
+    is never used - and it must lie inside the dataset folder after links are resolved. The file is only read: the
+    pipeline keeps its own copy as evidence, so the sample stays as it was delivered. Nothing is invented: the result is
+    what OCR makes of that image."""
+    body = json_body()
+    split, bank, name = (str(body.get(k) or "") for k in ("split", "bank", "filename"))
+    if not _SAMPLE_NAME.match(name):
+        raise ApiError(400, "validation_error", "Invalid filename.")
+    missing = ApiError(404, "not_found", "That sample is not in the dataset folder of this server.")
+    root = Path(current_app.config["OCR_DATASET_DIR"])
+    item = next((i for i in discover_ocr_images(root)
+                 if i["filename"] == name and i["split"] == split and i["bank"] == bank), None)
+    if item is None:
+        raise missing
+    path = Path(item["path"])
+    try:
+        inside = path.resolve().is_relative_to(root.resolve())
+        size = path.stat().st_size
+    except OSError:
+        raise missing
+    if not inside:
+        raise missing
+    if size > current_app.config["MAX_CONTENT_LENGTH"]:
+        raise ApiError(413, "file_too_large", "The sample exceeds the size limit.")
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        raise missing
+    data, img, clean = storage.read_upload(FileStorage(stream=io.BytesIO(raw), filename=name))
+    dup = query("SELECT id FROM cheques WHERE sha256=?", (storage.sha256(data),), one=True)
+    cid = cheques.create_from_upload(data, img, clean, g.user["id"])
+    audit.record("cheque.create", "cheque", cid, {"source": "dataset sample", "split": split, "bank": bank})
+    return ok(_created(cid, dup), 201)
 
 
 @bp.post("/api/cheques/batch")

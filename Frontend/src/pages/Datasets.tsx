@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { api, apiPage } from "../api";
+import { api, apiPage, Cheque, post } from "../api";
 import { useAuth } from "../auth";
-import { AuthImage, Bars, Button, ErrorState, fmtDate, Loading, Modal, PageHead, Pagination, Panel, Pill, Stat, useAsync, useToast } from "../components/ui";
+import { AuthImage, Bars, Button, ErrorState, errText, fmtDate, Loading, Modal, PageHead, Pagination, Panel, Pill, Stat, useAsync, useToast } from "../components/ui";
+import { navigate } from "../router";
 
 type Issue = { severity: "error" | "warning" | "info"; message: string };
 type Audit = Record<string, unknown> & { issues: Issue[]; generated_at: string };
@@ -39,16 +40,33 @@ function useAudit(which: "ocr" | "signature") {
 
 function Browser({ which }: { which: "ocr" | "signature" }) {
   const { can } = useAuth();
+  const toast = useToast();
   const [page, setPage] = useState(1);
   const [split, setSplit] = useState("");
   const [bank, setBank] = useState("");
   const [kind, setKind] = useState("genuine");
   const [open, setOpen] = useState<{ filename: string; split: string; bank: string } | null>(null);
+  const [processing, setProcessing] = useState(false);
   const url = which === "ocr" ? `/api/datasets/ocr/items?page=${page}&per_page=12&split=${split}&bank=${bank}`
     : `/api/datasets/signature/items?page=${page}&per_page=12&split=${split}&bank=${bank}&kind=${kind}`;
   const items = useAsync(() => apiPage<{ filename: string; split: string; bank: string; signer_id?: string }[]>(url), [url]);
   const imgUrl = (i: { filename: string; split: string; bank: string }) =>
     `/api/datasets/${which}/image?filename=${encodeURIComponent(i.filename)}&split=${i.split}&bank=${i.bank}`;
+  // Runs the same OCR pipeline as an upload on a file of the server's dataset folder, then shows the result.
+  const processSample = async (i: { filename: string; split: string; bank: string }) => {
+    setProcessing(true);
+    try {
+      const c = await post<Cheque>("/api/cheques/from-sample", { split: i.split, bank: i.bank, filename: i.filename });
+      toast("success", `Sample processed as cheque #${c.id} in ${(c.processing_ms / 1000).toFixed(1)} s`);
+      if (c.duplicate_of) toast("info", `This sample was already processed as cheque #${c.duplicate_of}.`);
+      setOpen(null);
+      navigate(`/cheques/${c.id}`);
+    } catch (e) {
+      toast("error", errText(e));
+    } finally {
+      setProcessing(false);
+    }
+  };
   return (
     <Panel title="Browse images" actions={
       <div className="filters">
@@ -72,7 +90,16 @@ function Browser({ which }: { which: "ocr" | "signature" }) {
         </>
       )}
       {open && (
-        <Modal title={open.filename} onClose={() => setOpen(null)}>
+        <Modal
+          title={open.filename}
+          onClose={() => setOpen(null)}
+          footer={which === "ocr" && can("admin", "operator") ? (
+            <>
+              <span className="tiny muted" style={{ marginRight: "auto", alignSelf: "center" }}>Sample from this server&apos;s project dataset ({open.split} split, {open.bank.toUpperCase()}). Processing reads the file; the original is not changed.</span>
+              <Button kind="primary" icon="scan" busy={processing} onClick={() => processSample(open)}>Process with OCR</Button>
+            </>
+          ) : undefined}
+        >
           <AuthImage src={imgUrl(open)} alt={open.filename} className={which === "ocr" ? "cheque-img" : "sig-img"} />
         </Modal>
       )}

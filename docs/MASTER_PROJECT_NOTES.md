@@ -4,8 +4,8 @@ Living document. Update whenever architecture, dependencies, APIs, environment v
 schema, model behaviour or deployment configuration change.
 Status values: NOT STARTED · IN PROGRESS · BLOCKED · TESTING · COMPLETED (completed = implemented **and** verified).
 
-Last updated: 2026-11-01 · branch `chequeverify-v2` · PR #1 (open, not merged) · nothing deployed · nothing pushed since Phase 1
-(all later work is local commits awaiting the owner's review).
+Last updated: 2026-11-01 (evening) · branch `chequeverify-v2` pushed to GitHub at `93c2f0c` at the owner's request (fast-forward, no force) ·
+PR #1 (open, not merged) · `main` untouched · the Render service is created by the owner (see §10).
 
 ## 1. What the application does
 Web application for Indian CTS-2010 cheques: upload a cheque → OCR of 10 fields with per-field
@@ -100,7 +100,7 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 2 | PDF crash on markup in corrections | COMPLETED | escaped in `reports.py`; regression test fails before / passes after |
 | 3 | OCR payee truncation + wrong "ok" statuses | COMPLETED (partially improves accuracy) | test 171→182/200, wrong-ok 6→2; 2 ICICI payee mis-reads remain |
 | 4 | Edited copies (script-made edits of a specimen) accepted | COMPLETED | 36/36 → 1/36 MATCH in the live app; ~10 % of the edits have no visible change. Earlier notes and reports call these "synthetic forgeries"; they are not forgeries by another person |
-| 5 | Models/reports persistence + root-owned disk | TESTING | entrypoint verified locally (simulated, as root); Docker CI job extended – runs after push |
+| 5 | Models/reports persistence + root-owned disk | COMPLETED (Docker); Render disk unverified | Verified in a real container on GitHub (2026-11-01): non-root server, private database, restart, redeploy onto the same disk, SIGKILL + restart with integrity check, clean `docker stop`. Local rehearsal 43/43. The Render disk itself is documentation-only until deployed |
 | 6 | Real client IP behind proxy | COMPLETED | ProxyFix via `CV_PROXY_HOPS`; test added |
 | 7 | Private file permissions | COMPLETED | umask 077 → 600 files (verified) |
 | 8 | Admin lockout by anyone (5 wrong passwords) | COMPLETED | Phase 2: persisted throttle per (IP, username) + per IP, no account lock, uniform answers for unknown users, `Retry-After`, `manage.py unlock-logins`; `tests/test_security.py` |
@@ -110,12 +110,12 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection; requirements in `docs/SIGNATURE_EVALUATION_PROTOCOL.md` §4 |
 | 13 | Dataset tests in CI | BLOCKED | datasets are private; needs private runner or synthetic fixtures |
 | 15 | Dataset validation (OCR test set + signature dataset) | COMPLETED | `reports/final/DATASET_VALIDATION_REPORT.md`; awaiting owner review before push |
-| 14 | Render deployment | NOT STARTED | needs owner approval and a paid plan for the disk |
+| 14 | Render deployment | IN PROGRESS (owner's step) | Code pushed 2026-11-01 at the owner's request. The service must be created by the owner: Render → New → Blueprint → branch `chequeverify-v2` (paid Starter plan + disk; `CV_ADMIN_PASSWORD` entered in the dashboard). No URL exists until then |
 | 16 | Upload memory-exhaustion guard | COMPLETED | Phase 2: pixel limit from the file header before decoding on every upload route; bomb PNG 968 MB → ≈111 MB peak |
 | 17 | Per-user rate limits on heavy endpoints | COMPLETED | Phase 2: `services/throttle.py` (`CV_RATE_LIMIT_PER_MIN`), in memory per process |
 | 18 | Password policy | COMPLETED | Phase 2: length (12 on Render), mix, common/username, ≠ current, first admin checked at start-up |
 | 19 | Pre-push audit (`scripts/prepush_audit.py`) + CI job | COMPLETED | Phase 2: 32 tests; with private terms it found real account numbers/names in an unpushed commit (see §9) |
-| 20 | CI hardening: read-only token, SHA-pinned actions, `pip-audit`, `npm audit`, Dependabot | TESTING | workflow syntax and shell steps validated locally; runs after the first push |
+| 20 | CI hardening: read-only token, SHA-pinned actions, `pip-audit`, `npm audit`, Dependabot | TESTING | Ran on GitHub 2026-11-01 (latest checked commit `1215ebc`): backend tests, frontend (real `vite build`), private-data audit, `pip-audit` and the real-container job pass. `npm audit` is split: the packages that ship (`--omit=dev`) gate the run; the build tools are reported as warnings (task 30) |
 | 21 | `package-lock.json` and dependency vulnerability scan | BLOCKED | npm/PyPI registries are blocked in the build sandbox (403); CI `dependency-audit` generates the lock and the audit results |
 | 22 | HttpOnly-cookie sessions, MFA/SSO, encryption at rest | NOT STARTED | design decisions for the deployer, see `docs/SECURITY.md` |
 | 23 | Genuine-signature collection and enrollment workflow (software) | COMPLETED | Phase 3: signing sessions, independence/readiness rule, same-signing refusal (≥ 98 % aligned ink agreement), batch upload, MATCH cap, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload). 88 new tests (`test_enrollment.py` 63, `test_collection.py` 25), live smoke 28/28, Chromium check 41/41 under the CSP. Protocol: `docs/SIGNATURE_ENROLLMENT.md` |
@@ -125,15 +125,20 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 28 | Frontend visual refresh (all pages, one design system) | TESTING | New tokens, typography (self-hosted Inter, OFL), buttons/cards/navigation/icons/dashboard, sign-in hero, waiting page; layout and every feature kept. `test_frontend_theme.py` (40) guards CSP compliance, no external resources, contrast, reduced motion. Checked in Chromium on desktop and phone width (screens reviewed by eye); built with esbuild because Vite is unavailable here, CI builds with Vite. No other browser or real screen reader tested |
 | 29 | Mail service for email sign-in (choice, credentials, deliverability check) | BLOCKED | needs the owner: SMTP host/user/from/password as environment secrets (never in git or chat), then a real sign-in test; until then only the administrator sign-in is offered |
 | 26 | Run the protocol on a real evaluation set | BLOCKED | needs ≥ 30 test signers on ≥ 3 days with forgeries by ≥ 2 other people (task 24 + forgers); until then genuine acceptance and skilled-forgery rejection stay unmeasured |
+| 30 | Frontend `npm audit` high/critical finding | OPEN (build tools only) | Vite <= 6.4.3 (we use 5.4.x): five development-server advisories plus `launch-editor` issues on Windows; npm suggests Vite 8.3.5 (major). Vite is not in the image, so the deployed app is not exposed; a developer is while `npm run dev` runs. Fix on a machine with npm access: upgrade Vite and `@vitejs/plugin-react`, run `npm run build`, commit `package-lock.json` (also makes builds reproducible). Details: `reports/final/SECURITY_AUDIT.md` #2 |
+| 31 | Real account number / cheque number / MICR code in the original code | OPEN - owner decision | `backend/utils/test_field_extraction_pipeline_patched.py` on `main` and its copy under `legacy/` in the first branch commit (public since 2026-10-31). Removing it from history needs a force-push of `main` and the branch, which is not done without the owner's explicit approval |
+| 33 | Demo samples: process a dataset image from the UI | COMPLETED (local); hosted copy has no dataset by design | `POST /api/cheques/from-sample` + *Process with OCR* button in the OCR dataset viewer. 7 tests (identity by split/bank/name, no client path, link leaving the folder refused, roles, size and format refusals, original untouched, duplicate detection); two protections mutation-checked; clicked through in Chromium against the real sample cheques (6/6). Datasets stay outside git and the image |
+| 32 | Container checks found two bugs (2026-11-01) | COMPLETED | Waitress 3 stripped `X-Forwarded-*` (all clients looked like the proxy, no HSTS) -> `clear_untrusted_proxy_headers=False`; SIGTERM handler printed before starting its watchdog (about 1 in 3 hangs under load) -> watchdog first, `os.write`. Both pinned by tests that fail on the old code |
 
 ## 9. Known bugs / limitations
 - OCR (after phase 1, test set, not blind): 4 of 200 fields still wrong, all flagged for review; 44 of 196
   correct fields are still sent to review (conservative); the Canara branch is always sent to review.
-- Private values were found by the pre-push audit: (a) real account numbers and payee names in the **unpushed**
-  phase 1 commit `9e1c3f6` (scrubbed in `57dba7d`; nothing was pushed — publish through a branch built from the
-  remote tip with cherry-picks so these values never reach GitHub, no history rewrite needed); (b) already on
-  `main` (your original code, untouched): `backend/utils/test_field_extraction_pipeline_patched.py` holds one
-  real account number plus cheque numbers and MICR codes, `confirmed_labels.py` holds dataset file names;
+- Private values were found by the pre-push audit: (a) real account numbers and payee names in test files of the local
+  phase 1 commit `9e1c3f6` (scrubbed in `57dba7d`). They were **not published**: the branch pushed on 2026-11-01 was rebuilt on top of
+  GitHub's tip with those two commits squashed (`4fb09f5` in the pushed history; the pre-push audit reports 0 errors for everything
+  that was pushed). The unsquashed commits exist only in the sandbox's local branch; (b) already on `main` (your original code,
+  untouched): `backend/utils/test_field_extraction_pipeline_patched.py` holds one real account number plus cheque numbers and MICR
+  codes, its copy under `legacy/` is in the first pushed branch commit, and `confirmed_labels.py` holds dataset file names (task 31);
   (c) already pushed on `chequeverify-v2`: cheque numbers/file names in `reports/final/OCR_DATASET_AUDIT.json`
   and generic amount-in-words phrases in `test_units.py` (low sensitivity).
 - The signature dataset has no independent genuine sample (each specimen is cropped from its signer's only
@@ -160,7 +165,8 @@ Older databases are upgraded in place by an additive, idempotent migration at st
   MATCH allowed, not reliable.
 - `retention.days` is only a setting: there is no automatic deletion of signatures or consent withdrawal workflow
   beyond deleting the signer.
-- Waitress not tested in the build environment (falls back to Flask's threaded server if missing).
+- Waitress is not installable in the build sandbox (falls back to Flask's threaded server there). The container run on GitHub uses it and
+  found the proxy-header bug (task 32); behaviour under load on Render is untested.
 - After sign-out/in the UI stays on the last page.
 - Email sign-in proves control of a mailbox, not identity: anyone who can read a user's mail (compromised, shared or
   forwarded mailbox) can sign in as that user. No MFA beyond the mailbox, no SSO. Real SMTP delivery, spam filtering and
@@ -169,9 +175,11 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 - The visual refresh was not run through Vite, other browsers or an accessibility audit tool; contrast is checked by test and by eye.
 
 ## 10. Deployment status
-Not deployed. Docker image built and smoke-tested in CI (previous commit). New entrypoint and
-persistence checks run in CI on the next push. Render requires the owner's approval and a paid plan
-for persistent storage (see `docs/DEPLOYMENT.md`).
+Code is on GitHub (branch `chequeverify-v2`; the newest commit is shown by `git log`). **No Render service has been created by this project's
+tooling**, so there is no URL yet; the owner creates it: Render -> New -> Blueprint -> repository `nvaltryek-001/Cheque` -> branch
+`chequeverify-v2` -> enter `CV_ADMIN_PASSWORD` (12+ characters, letters and digits/symbols) -> Apply (paid Starter plan + 1 GB disk).
+Sign in at the service URL with *Administrator sign-in*, user `admin`. The hosted copy starts empty (datasets are private). Container
+checks run on GitHub on every push; results and what is still unverified: `reports/final/DEPLOYMENT_VERIFICATION.md`.
 
 ## 11. Change log
 | Date | Change |
@@ -186,3 +194,6 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-11-01 | Phase 3 signature enrollment: `enrollment_sessions` table + specimen provenance columns (additive migration), readiness rule and MATCH cap, same-signing refusal, batch upload, session/readiness API, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload, readiness column, verification banner, settings), `docs/SIGNATURE_ENROLLMENT.md`, manifest template; default `signature.max_specimens_per_signer` 5 → 20 for new installs |
 | 2026-11-01 | Phase 4 signature evaluation protocol: `app/signature/protocol.py`, `manage.py eval-signatures` (`--dataset` status report, `--split val`, `--split test --final`), test-use ledger, suggested thresholds from validation only, claims generated from the report; training report relabelled ("edited copy", `scope` block, `fitted_signer_hashes` in the model); Training page notice; `docs/SIGNATURE_EVALUATION_PROTOCOL.md`, manifest template, `reports/final/SIGNATURE_EVALUATION_STATUS.{md,json}`; "Valid signature evaluation" added to training readiness as BLOCKED |
 | 2026-11-01 | Passwordless institutional-email sign-in (`email_login.py`, `mailer.py`, `login_codes`, `users.email`/`pending_approval`, waiting-for-approval gate, approval in Settings → Users and roles, `docs/AUTHENTICATION.md`) and a frontend visual refresh (design system, fonts, sign-in hero, icons, dashboard stat tiles, decision mix, user table, mobile layout; `test_frontend_theme.py`); browser/live smoke tests extended |
+| 2026-11-01 | Phase 5 (persistence): atomic writes, start-up recovery, SIGTERM handling, seeding with a manifest, backup/verify/restore, image concurrency + 12 MP limit, deployment rehearsal, persistence checker; `docs/DEPLOYMENT.md` rewritten |
+| 2026-11-01 | Demo samples: *Process with OCR* in the OCR dataset viewer (`POST /api/cheques/from-sample`); CI: read-only-container probe uses the container's own port, `npm audit` split into the part that ships (blocking) and the build tools (reported as warnings); `.env.example` and `docs/API.md` updated |
+| 2026-11-01 | Pushed to GitHub at the owner's request (clean rebuilt history, audit 0 errors). Container checks on GitHub found and fixed two bugs (Waitress stripped proxy headers; SIGTERM watchdog race). Reports: dataset results, deployment verification, regression, security audit, final completion report |

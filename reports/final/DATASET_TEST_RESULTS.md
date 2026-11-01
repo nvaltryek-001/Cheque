@@ -47,17 +47,19 @@ Every image is far below the 12-megapixel upload limit of the Docker image.
 expect each cheque to take longer there, not shorter. A larger plan (more CPU) is the direct way to make results appear
 sooner; so is a smaller OCR workload (fewer re-reads per field), which would cost accuracy.
 
-## 5. OCR results (`reports/final/ocr_evaluation_test.json`, `DATASET_VALIDATION_REPORT.md`, `MASTER_PROJECT_NOTES.md` section 7)
-Fill rate on the 20 test cheques (share of cheques where the field was read at all):
+## 5. OCR results (re-run on the final code, 2026-11-01)
+Sources: `python backend/manage.py eval-ocr --split test` (presence and cross-checks; `reports/final/ocr_evaluation_test.json`, without the per-image
+predictions, which contain private values) and `manage.py score-ocr` against the labels (accuracy; the full table stays outside the repository).
 
-| Bank | Branch | IFSC | Cheque no. | MICR code | Account no. | Date | Payee | Amount (figures) | Amount (words) |
-|---|---|---|---|---|---|---|---|---|---|
-| 100 % | 85 % | 100 % | 100 % | 100 % | 90 % | 95 % | 100 % | 100 % | 100 % |
+**Presence:** every one of the ten fields was read on every one of the 20 test cheques (100 % each: bank, branch, IFSC, cheque no., MICR code, account no., date,
+payee, amount in figures, amount in words).
 
-Accuracy against the labels: **196 of 200 fields (98 %)**, 0 wrong values marked "ok"; the 4 remaining wrong fields
-are all flagged for review. Cheque number, MICR code and bank name were 20/20 each. Cross-checks: amount in words
-agrees with the figures on 17 of 20 (85 %); the date is valid on 19 of 20; the account number is found in the
-enrolled-signer registry for 18 of 20.
+**Accuracy against the labels: 196 of 200 fields (98 %; 95 % confidence interval 95.0 to 99.2 %)**, and 16 of 20 cheques have every field correct; the other four have
+exactly one wrong field (one branch name, one IFSC, one date, one amount in words), and all four wrong values are flagged for review. **No wrong value is marked "ok".**
+Correct per field (of 20): bank 20, branch 19, IFSC 19, cheque no. 20, MICR code 20, account no. 20, date 19, payee 20, amount in figures 20, amount in words 19.
+The program marked 152 of the 200 fields "ok" (all 152 correct) and sent 48 to review, 44 of which were correct. **Every branch name goes to review, so no cheque is
+accepted without a person looking at it.** Cross-checks: the amount in words agrees with the figures on 20 of 20 cheques and the date is a valid calendar date on 20 of 20.
+The check "account number is found in the enrolled signers" (18 of 20 in the phase-1 run) needs the signers to be enrolled and was not repeated in the final run.
 
 **Read these numbers with their limits:**
 * The labels were transcribed from the images by the AI assistant, not by a person. One was already found wrong.
@@ -81,9 +83,10 @@ evaluation workflow for collecting the data that would (`docs/SIGNATURE_ENROLLME
 is built and tested with synthetic data; it has not been run on real consented samples.
 
 ## 7. Failed and missing cases
-* 4 of 200 OCR fields wrong (flagged for review). Details are in the private score table, not here.
-* Not read at all: branch on 3 cheques, account number on 2, date on 1.
-* Amount in words disagrees with the figures on 3 cheques (the pipeline cross-checks the two and reports a disagreement).
+* 4 of 200 OCR fields wrong (one branch name, one IFSC, one date, one amount in words), all flagged for review. Details are in the private score table, not here.
+* In the final run no field was missing on any cheque. (An earlier version of the extraction code missed the branch on 3 cheques, the account number on 2 and the date on 1,
+  and the amount in words disagreed with the figures on 3.)
+* The 44 correct values that were sent to review show the cost of caution: a person still has to look at every cheque.
 
 ## 8. Dataset limitations
 Labels not human-verified; test split not blind; four banks; no independent genuine signature per signer; no real

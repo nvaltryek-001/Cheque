@@ -32,7 +32,7 @@ Banks still key in cheque details by hand and compare signatures by eye. This pr
 | Batch | Up to 20 cheques per batch |
 | Enrollment | Signer CRUD, signing sessions (day, method, consent reference), multi-file upload into a session, reference-set readiness (independent specimens × signing days), quality gate, duplicate and same-signing detection, replace/deactivate/delete, enrollment history, bulk `import-collection`, dataset import – see `docs/SIGNATURE_ENROLLMENT.md` |
 | Verification | From a processed cheque (auto or manual crop) or an uploaded image; compares against all active specimens; reasons, feature scores, threshold scale; manual approve/reject. A `MATCH` is only issued when the signer's reference set is ready (otherwise it is lowered to `REVIEW`) |
-| Datasets | Live audits of both datasets; manifest-based browser |
+| Datasets | Live audits of both datasets; manifest-based browser; **open a sample cheque and press *Process with OCR*** to run it through the same pipeline as an upload (the file is only read) |
 | Models | Readiness assessment; background training/evaluation jobs with history and metrics |
 | Reports | Per-cheque PDF; CSV exports (cheques, verifications, signers, audit log); audit/evaluation report downloads |
 | Security | Token auth (password or mailed one-time code for `@saividya.ac.in` addresses, new accounts wait for approval), 3 roles, per-client sign-in throttling, per-user rate limits, password policy, token revocation, upload validation by content (size and pixel limits before decoding), CSP/HSTS and other headers, private storage, audited biometric access, masked account numbers, pre-push audit for private data |
@@ -120,12 +120,18 @@ folders, and the cheque number = filename stem (119/120 files). See `docs/OCR_DA
 corrupted files, no signer in more than one split. One specimen per signer means signer-specific or
 Siamese training is **blocked**. See `docs/SIGNATURE_DATASET.md`.
 
+**Demo samples.** Sign in, open *OCR dataset* in the navigation, click any image and press *Process with OCR*: the server reads that file
+from its dataset folder (`dataset/`, or `CV_OCR_DATASET`), runs the normal upload pipeline and opens the result. Nothing is generated or
+faked, the original file is not changed, and the result is labelled as a dataset sample. This needs the dataset folder on the machine
+that runs the server: on the Docker/Render copy the folder is empty by design (the datasets are private), so load cheques there with
+*Batch upload* or the upload box.
+
 ## 7. Models and results (held-out test split, measured – not estimated)
 
 | Component | What was trained | Test result |
 |---|---|---|
 | MICR E-13B reader | 480 glyph templates from 80 train cheques (labels = filename cheque number) | Cheque number exact match **20 of 20** test cheques (19/19 val). 95 % lower confidence bound ≈ 83 %. |
-| Field extraction (Tesseract 5.3.4) | Rules + region isolation; developed on train/val | Against hand-transcribed labels for the 20 test cheques (transcribed by Claude, not yet human-verified): **182/200 fields correct**; bank, cheque no., MICR 20/20; payee 17/20; branch 14/20; 16 of 18 wrong values are flagged for review |
+| Field extraction (Tesseract 5.3.4) | Rules + region isolation; refined in phase 1 (2026-10-31) on the train, validation and test splits | Against labels for the 20 test cheques (transcribed by the AI assistant, **not human-verified**): **196/200 fields correct**, 0 wrong values marked ok, the 4 wrong ones flagged for review; bank, cheque no., MICR 20/20. The split is **not blind** (the rules were tuned on it), so accuracy on unseen cheques will be lower - by an unmeasured amount |
 | Handwritten OCR | — | **Blocked**: no handwritten fields, no transcriptions |
 | Signature fusion (logistic regression over 8 similarity features) + alteration check | Fusion on train pairs, thresholds on validation, alteration thresholds on train | Different signer: 0/60 accepted. Script-made edit of the specimen (an *edited copy*, not a forgery by another person) submitted as-is: **2/40 accepted**, 21/40 rejected, 17/40 review (before the alteration check every as-is edited copy was accepted). MATCH on any negative 1.4 %. Simulated genuine re-captures mostly go to REVIEW (45/60). **These figures say nothing about real genuine signatures or skilled forgeries** – see `docs/SIGNATURE_EVALUATION_PROTOCOL.md` |
 | Signer-specific / Siamese | — | **Blocked**: needs several real specimens per signer |
@@ -191,7 +197,15 @@ docker build -t chequeverify .
 docker run -p 8000:8000 -e CV_ADMIN_PASSWORD='Choose-a-strong-one-123' -v chequeverify-data:/data chequeverify
 ```
 Or connect this repository to Render as a Blueprint (`render.yaml`). Full guide: `docs/DEPLOYMENT.md`.
-GitHub Actions (`.github/workflows/ci.yml`) runs the tests, the Vite build and a Docker smoke test on every push.
+GitHub Actions (`.github/workflows/ci.yml`) runs the backend tests, the Vite build, a dependency audit, the private-data audit
+and, in a real container, the live smoke test, persistence across restart, redeploy and hard kill, a clean `docker stop`, the
+reverse-proxy headers and a 512 MB memory check (results: `reports/final/DEPLOYMENT_VERIFICATION.md`).
+
+The Docker image accepts images up to **12 megapixels** (`CV_MAX_IMAGE_PIXELS`; larger ones are refused with `413 image_too_large`)
+and processes two at a time (`CV_MAX_CONCURRENT_IMAGES`; others wait, then get `503 busy`), so it fits a 512 MB instance.
+Raise both on a host with more memory. **The hosted copy starts empty**: the private datasets are not in git or in the image;
+sign in as administrator and use *Batch upload* to load cheques. A cheque takes about 4 s of OCR on 2 CPUs (a small hosted
+instance is slower).
 
 The previous implementation (v1) is preserved unchanged under `legacy/`.
 
@@ -252,6 +266,10 @@ independent security test (open items: `docs/SECURITY.md`).
 - In this dataset the enrolled specimens were cropped from the same cheque scans, so verifying those
   cheques against them is not an independent test (the copy check sends these to REVIEW as near-identical copies).
 - PaddleOCR adapter follows the documented 3.x API but was not executed in the build environment.
+- The OCR labels were transcribed by the AI assistant and the test split is not blind: the 196/200 figure is an upper
+  bound for unseen cheques, not an estimate of them. Four banks and clean flat scans only; phone photographs are untested.
+- Speed: about 4 s of OCR per cheque on 2 CPUs; eight uploads at once take about 18 s in total. A small hosted instance is slower.
+- Not verified: a real Render deployment, real email delivery (SMTP), and the Render disk's behaviour (documentation only).
 
 ## 13. Future scope
 
@@ -271,7 +289,13 @@ recognition; layout detection for unseen templates; MFA/SSO; encrypted object st
 | Account locked | Wait 5 minutes or reset the password |
 | `npm run build` type errors | `cd Frontend && npm install` (types come from `@types/react`) |
 | Port 5000 busy | `.\start.ps1 -Port 8000` |
+| Console errors for `/api/foods`, a `main.tsx` MIME type or a service worker | This frontend has no service worker and no `/api/foods` call, and it talks to the API on its own address. Another app (or an older copy) was served on the same address, for example `localhost:5173`, and left a service worker in the browser. DevTools → Application → Service Workers → Unregister, then "Clear site data" and reload (or use another port). Run the app from `Frontend/`, not `legacy/Frontend`. |
+| `413 image_too_large` | The image has more pixels than `CV_MAX_IMAGE_PIXELS` (12 megapixels in the Docker image, 25 without). Scan at 300 dpi or raise the limit on a host with more memory. |
+| `503 busy` | Two images are already being processed. Try again after a few seconds (`Retry-After: 5`). |
 
 ## 15. Status
 
-Current task status and known issues: `docs/MASTER_PROJECT_NOTES.md`. Audit: `reports/final/PRODUCTION_READINESS_AUDIT.md`.
+Current task status and known issues: `docs/MASTER_PROJECT_NOTES.md`. Final report with evidence-based readiness figures:
+`reports/final/FINAL_COMPLETION_REPORT.md`; regression: `reports/final/PHASE6_REGRESSION_RESULTS.md`; deployment:
+`reports/final/DEPLOYMENT_VERIFICATION.md`; dataset: `reports/final/DATASET_TEST_RESULTS.md`; security:
+`reports/final/SECURITY_AUDIT.md`. Earlier audit: `reports/final/PRODUCTION_READINESS_AUDIT.md`.
