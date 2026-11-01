@@ -135,8 +135,8 @@ Older databases are upgraded in place by an additive, idempotent migration at st
   correct fields are still sent to review (conservative); the Canara branch is always sent to review.
 - Private values were found by the pre-push audit: (a) real account numbers and payee names in test files of the local
   phase 1 commit `9e1c3f6` (scrubbed in `57dba7d`). They were **not published**: the branch pushed on 2026-11-01 was rebuilt on top of
-  GitHub's tip with those two commits squashed (`4fb09f5` in the pushed history; the pre-push audit reports 0 errors for everything
-  that was pushed). The unsquashed commits exist only in the sandbox's local branch; (b) already on `main` (your original code,
+  GitHub's tip with those two commits squashed (`4fb09f5` in the pushed history; the pre-push audit with the private terms reports no error in the commits added by this work; its only error is finding (b)
+  below, in the original first commit). The unsquashed commits exist only in the sandbox's local branch; (b) already on `main` (your original code,
   untouched): `backend/utils/test_field_extraction_pipeline_patched.py` holds one real account number plus cheque numbers and MICR
   codes, its copy under `legacy/` is in the first pushed branch commit, and `confirmed_labels.py` holds dataset file names (task 31);
   (c) already pushed on `chequeverify-v2`: cheque numbers/file names in `reports/final/OCR_DATASET_AUDIT.json`
@@ -196,4 +196,4 @@ checks run on GitHub on every push; results and what is still unverified: `repor
 | 2026-11-01 | Passwordless institutional-email sign-in (`email_login.py`, `mailer.py`, `login_codes`, `users.email`/`pending_approval`, waiting-for-approval gate, approval in Settings → Users and roles, `docs/AUTHENTICATION.md`) and a frontend visual refresh (design system, fonts, sign-in hero, icons, dashboard stat tiles, decision mix, user table, mobile layout; `test_frontend_theme.py`); browser/live smoke tests extended |
 | 2026-11-01 | Phase 5 (persistence): atomic writes, start-up recovery, SIGTERM handling, seeding with a manifest, backup/verify/restore, image concurrency + 12 MP limit, deployment rehearsal, persistence checker; `docs/DEPLOYMENT.md` rewritten |
 | 2026-11-01 | Demo samples: *Process with OCR* in the OCR dataset viewer (`POST /api/cheques/from-sample`); CI: read-only-container probe uses the container's own port, `npm audit` split into the part that ships (blocking) and the build tools (reported as warnings); `.env.example` and `docs/API.md` updated |
-| 2026-11-01 | Pushed to GitHub at the owner's request (clean rebuilt history, audit 0 errors). Container checks on GitHub found and fixed two bugs (Waitress stripped proxy headers; SIGTERM watchdog race). Reports: dataset results, deployment verification, regression, security audit, final completion report |
+| 2026-11-01 | Pushed to GitHub at the owner's request (clean rebuilt history; the private-terms audit finds no error in what was added, only the pre-existing legacy file). Container checks on GitHub found and fixed two bugs (Waitress stripped proxy headers; SIGTERM watchdog race). Reports: dataset results, deployment verification, regression, security audit, final completion report |

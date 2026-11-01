@@ -27,7 +27,7 @@ the nearest 5 %** so that no figure is more precise than the evidence. Nothing i
 | Overall development completion | **65 %** | mean of the eight rows below (66.9) rounded down |
 | Backend | **90 %** | 13 / 14 |
 | Frontend | **75 %** | 13 / 17 |
-| Dataset integration | **80 %** where the dataset folder exists (hosted copy: 72 % on the same list, but without the headline requirement) | 19.5 / 23 (hosted 16.5 / 23) |
+| Dataset integration | **80 %** where the dataset folder exists (hosted copy: 70 % on the same list, but without the headline requirement) | 19 / 23 (hosted 16 / 23) |
 | OCR functionality | **55 %** | 5.5 / 10 |
 | Signature verification | **35 %** | 40 points for working software x 90 % + 60 points for accuracy measured on real data x 5 % = 39 |
 | Security | **65 %** | 14.5 / 21 |
@@ -46,8 +46,8 @@ navigation; the production build with the real Vite and TypeScript on GitHub; AP
 eye at desktop and phone width, no automated check), the three browser errors seen earlier (cause identified: another app on the same port; not reproducible here), browser coverage (Chromium
 only), dependencies (the page's own packages are clean; Vite's development-server advisories are open). Not verified: Vite's development server with its proxy (npm is unavailable in the sandbox).
 
-**Dataset integration, 19.5 of 23.** The brief's ten requirements (identify the dataset, verify paths, splits and missing images, load it without typing paths, no retraining at start-up, efficient loading,
-nothing private in logs or commits) score 9.5: all met except "available automatically", which holds only where the dataset folder exists. The demo experience and report items (dashboard, samples
+**Dataset integration, 19 of 23.** The brief's ten requirements (identify the dataset, verify paths, splits and missing images, load it without typing paths, no retraining at start-up, efficient loading,
+nothing private in logs or commits) score 9: all met except "available automatically" (half: it holds only where the dataset folder exists) and "nothing private in commits" (half: two low-sensitivity values sit in published test files, security finding 8). The demo experience and report items (dashboard, samples
 available, select a sample, upload, OCR of the selected sample, fields, signature check, confidence and warnings, understandable results, clear errors, no endless loading, labelled demo data,
 `DATASET_TEST_RESULTS.md`) score 10 of 13: dashboard speed and how understandable the results are to real users were not measured, the signature check needs an enrolled signer, and the
 result page does not itself carry a "sample" label (the viewer does). **The hosted copy contains no dataset, by design: the cheques hold real-looking account numbers and the repository is public.**
@@ -95,13 +95,12 @@ Signatures: another signer accepted 0 of 14,280 pairs; edited copies accepted 2 
 
 ## 7. Security audit results (details: `SECURITY_AUDIT.md`)
 Critical 0. **High 2, both open:** (1) one real account number, cheque numbers and MICR codes in the original code, also in the public history and on `main` (owner decision: removing needs a force-push); (2) Vite 5 development-server advisories (not in the
-deployed image; fix needs npm access). Medium 4, all fixed (Waitress dropping proxy headers, SIGTERM watchdog race, real values in an unpublished commit, memory exhaustion). Low 3, Informational 3. Pre-push audit on everything published: 0 errors against the
-323 private values; `pip-audit`: no known vulnerabilities. By the brief's own rule, pushing with unresolved High findings is not recommended; it was done at the owner's explicit request, nothing private was published by this work, and finding 1 pre-dates it.
+deployed image; fix needs npm access). Medium 4, all fixed (Waitress dropping proxy headers, SIGTERM watchdog race, real values in an unpublished commit, memory exhaustion). Low 3, Informational 3. Pre-push audit against the 323 private values: 0 errors in the commits added by this work; its only error on the whole branch is finding 1, in the original first commit `419ccb8`; low-sensitivity warnings remain in two published test files (a bank routing code in the OpenCV fixtures, an amount in words in a scoring test; finding 8). `pip-audit`: no known vulnerabilities. By the brief's own rule, pushing with unresolved High findings is not recommended; it was done at the owner's explicit request, no account number, payee name, cheque image or signature was published by this work (finding 1 pre-dates it; finding 8 lists the low-sensitivity values that were).
 
 ## 8. Git
 * Branch: `chequeverify-v2` on GitHub (local working branch `chequeverify-v2-publish`, tracking it). `main` is `d509c14`, unchanged. PR #1 untouched.
 * Working tree when this report was written: only the files of the commit that contains this report were modified; nothing else pending.
-* Commits since `main` (24, oldest first, as published; this report's own commit comes after the last one):
+* Commits since `main` (25 before the commit that contains this report, oldest first, as published):
 
 ```
 419ccb8 ChequeVerify AI v2: full rebuild with signature verification, CRUD, tests and deployment
