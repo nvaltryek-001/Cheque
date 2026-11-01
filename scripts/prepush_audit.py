@@ -52,7 +52,8 @@ FONT_MAX_BYTES = 256 * 1024
 SKIP_CONTENT = ["*package-lock.json", "*.min.js", "*.svg", "*.lock"]
 # generic "password = '…'" matches in these places are example/test credentials: reported as INFO
 EXAMPLE_PATHS = [r"^\.github/", r"^backend/tests/", r"^docs/", r"^README", r"^render\.yaml$", r"^Dockerfile$",
-                 r"^start\.(sh|ps1)$", r"^legacy/", r"\.example$", r"^reports/"]
+                 r"^start\.(sh|ps1)$", r"^legacy/", r"\.example$", r"^reports/",
+                 r"^scripts/time_uploads\.py$"]       # builds a throw-away key and password at run time (secrets.token_*)
 
 IMAGE_EXT = r"png|jpe?g|gif|bmp|tiff?|webp|heic|heif|ico|jfif"
 PATH_RULES = [
