@@ -3,7 +3,7 @@
 # Run:    docker run -p 8000:8000 -e CV_ADMIN_PASSWORD=Change-me-123 -v cv-data:/data chequeverify
 # Everything that must survive restarts lives in /data (database, uploads, specimens, models, reports).
 
-FROM node:20-alpine AS ui
+FROM node:26-alpine AS ui
 WORKDIR /ui
 COPY Frontend/package.json Frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
