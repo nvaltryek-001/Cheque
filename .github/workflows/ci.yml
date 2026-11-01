@@ -3,13 +3,24 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "23 4 * * 1"   # weekly: new advisories appear without any code change
 
+# Least privilege: no job needs to write to the repository or to any other GitHub resource.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to commit SHAs (the comment names the release line); Dependabot keeps them current.
 jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install Tesseract
@@ -33,8 +44,8 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
       - name: Install
@@ -44,11 +55,49 @@ jobs:
         working-directory: Frontend
         run: npm run build
 
+  # Known-vulnerability scan of the dependencies (also weekly, see "schedule" above).
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Python dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Frontend dependencies (npm audit, high and critical)
+        working-directory: Frontend
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-fund
+          npm audit --audit-level=high
+      - name: Keep the generated lock file (commit it to make builds reproducible)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend-package-lock
+          path: Frontend/package-lock.json
+
+  # Everything this branch adds to main is searched for secrets, datasets, cheque images, databases and
+  # environment files. Private terms (real account numbers, names) can only be searched locally: see docs/SECURITY.md.
+  private-data-audit:
+    if: github.event_name != 'schedule' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Pre-push audit against main
+        run: python3 scripts/prepush_audit.py --base origin/main
+
   docker:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build image
         run: docker build -t chequeverify .
       - name: Start container (root-owned /data, like a hosted persistent disk)
@@ -64,6 +113,17 @@ jobs:
         run: |
           docker top cv -eo uid,args | tee /dev/stderr | grep "run.py --prod" | awk '{print $1}' | grep -qx 10001
           sudo stat -c "%a %u" /srv/cvdata/instance/chequeverify.db | tee /dev/stderr | grep -qx "600 10001"
+      - name: Security headers on the page and on the API
+        run: |
+          PAGE=$(curl -si http://127.0.0.1:8000/)
+          API=$(curl -si http://127.0.0.1:8000/api/health)
+          echo "$PAGE" | grep -i "^content-security-policy: default-src 'self'; script-src 'self'" >/dev/null
+          echo "$API"  | grep -i "^content-security-policy: default-src 'none'" >/dev/null
+          for h in "x-content-type-options: nosniff" "x-frame-options: DENY" "referrer-policy: no-referrer" \
+                   "permissions-policy:" "cross-origin-opener-policy: same-origin"; do
+            echo "$API" | grep -i "^$h" >/dev/null || { echo "missing header: $h"; exit 1; }
+          done
+          if echo "$PAGE$API" | grep -i "^strict-transport-security" >/dev/null; then echo "HSTS sent over plain HTTP"; exit 1; fi
       - name: Data survives a container restart
         run: |
           docker restart cv
@@ -72,6 +132,24 @@ jobs:
             -d '{"username":"admin","password":"Ci-pass-12345"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
           curl -fs "http://127.0.0.1:8000/api/cheques" -H "Authorization: Bearer $TOKEN" \
             | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["meta"]["total"]>=1,d;print("cheques after restart:",d["meta"]["total"])'
+      - name: Behind one reverse proxy (as on Render) HSTS and the client address are honoured
+        run: |
+          sudo mkdir -p /srv/cvdata2 && sudo chown root:root /srv/cvdata2
+          docker run -d --name cvp -p 8001:8000 -v /srv/cvdata2:/data \
+            -e CV_PROXY_HOPS=1 -e CV_MIN_PASSWORD_LENGTH=12 -e CV_ADMIN_PASSWORD=Ci-pass-123456 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8001/api/health >/dev/null && break; sleep 2; done
+          curl -si -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8001/api/health \
+            | grep -i "^strict-transport-security: max-age=" >/dev/null
+          curl -s -o /dev/null -X POST http://127.0.0.1:8001/api/auth/login -H 'Content-Type: application/json' \
+            -H 'X-Forwarded-For: 203.0.113.9' -d '{"username":"admin","password":"wrong-password-1"}'
+          TOKEN=$(curl -fs -X POST http://127.0.0.1:8001/api/auth/login -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"Ci-pass-123456"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
+          curl -fs "http://127.0.0.1:8001/api/audit-log?per_page=100" -H "Authorization: Bearer $TOKEN" | grep -q "203.0.113.9"
+          # the weak-password policy is enforced
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8001/api/users \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"username":"weakuser","password":"Short-1a","role":"operator"}')
+          test "$code" = 400
       - name: Container logs
         if: always()
-        run: docker logs cv
+        run: docker logs cv; docker logs cvp 2>/dev/null || true

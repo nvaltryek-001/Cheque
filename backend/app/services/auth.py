@@ -20,20 +20,42 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..api.common import ApiError
 from ..db import execute, now_iso, query
+from . import audit, throttle
 
 ROLES = ("admin", "operator", "auditor")
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 8   # default; the effective value is current_app.config["MIN_PASSWORD_LENGTH"]
 
 
 def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="cv-auth")
 
 
-def validate_password(password: str) -> None:
-    if len(password or "") < MIN_PASSWORD_LENGTH:
-        raise ApiError(400, "weak_password", f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+# Passwords that are rejected whatever their length (product name, defaults people try first).
+COMMON_PASSWORDS = {"password", "passw0rd", "password1", "password123", "admin123", "admin@123", "administrator",
+                    "welcome1", "welcome123", "changeme", "change-me-123", "letmein", "qwerty123", "chequeverify",
+                    "chequeverify1", "chequeverify123", "iloveyou1", "abc12345", "12345678a"}
+
+
+def password_problem(password: str, minimum: int, username: str = "") -> str | None:
+    """Why `password` is not acceptable (None = acceptable). Pure function: no request context needed."""
+    password = password or ""
+    if len(password) < minimum:
+        return f"Password must be at least {minimum} characters."
     if password.isdigit() or password.isalpha():
-        raise ApiError(400, "weak_password", "Password must mix letters and numbers/symbols.")
+        return "Password must mix letters and numbers/symbols."
+    if password.lower() in COMMON_PASSWORDS or (username and password.lower() == username.strip().lower()):
+        return "Password is too common or equals the username."
+    return None
+
+
+def minimum_password_length(config) -> int:
+    return max(MIN_PASSWORD_LENGTH, int(config.get("MIN_PASSWORD_LENGTH") or 0))
+
+
+def validate_password(password: str, username: str = "") -> None:
+    problem = password_problem(password, minimum_password_length(current_app.config), username)
+    if problem:
+        raise ApiError(400, "weak_password", problem)
 
 
 def hash_password(password: str) -> str:
@@ -61,28 +83,34 @@ def public_user(row) -> dict:
 
 
 def authenticate(username: str, password: str):
+    """Check credentials behind the per-client throttle (services/throttle.py). A blocked client is refused
+    before the password is looked at; failures are recorded per client IP and username, never per account,
+    so outsiders cannot lock a real user out."""
+    throttle.check_login(username)
     user = query("SELECT * FROM users WHERE username = ?", (username,), one=True)
     if user is None:
         check_password_hash(generate_password_hash("x"), password or "")  # equalise timing
+        _failed(username, None)
         raise ApiError(401, "invalid_credentials", "Invalid username or password.")
-    if user["locked_until"]:
-        until = datetime.fromisoformat(user["locked_until"])
-        if until > datetime.now(timezone.utc):
-            raise ApiError(429, "account_locked", "Too many failed attempts. Try again later.")
     if not check_password_hash(user["password_hash"], password or ""):
-        failed = user["failed_logins"] + 1
-        locked = None
-        if failed >= current_app.config["LOGIN_MAX_ATTEMPTS"]:
-            locked = (datetime.now(timezone.utc) +
-                      timedelta(seconds=current_app.config["LOGIN_LOCK_SECONDS"])).replace(microsecond=0).isoformat()
-            failed = 0
-        execute("UPDATE users SET failed_logins=?, locked_until=? WHERE id=?", (failed, locked, user["id"]))
+        _failed(username, user)
         raise ApiError(401, "invalid_credentials", "Invalid username or password.")
     if not user["is_active"]:
         raise ApiError(403, "account_disabled", "This account is disabled.")
-    execute("UPDATE users SET failed_logins=0, locked_until=NULL, last_login_at=? WHERE id=?",
-            (now_iso(), user["id"]))
+    throttle.record_success(username)
+    execute("UPDATE users SET last_login_at=? WHERE id=?", (now_iso(), user["id"]))
     return query("SELECT * FROM users WHERE id=?", (user["id"],), one=True)
+
+
+def _failed(username: str, user) -> None:
+    """Record a failed sign-in and audit it. Only names of existing accounts are written to the audit log:
+    people sometimes type their password into the username box."""
+    blocked_now = throttle.record_failure(username)
+    who = user["username"] if user else "(unknown)"
+    audit.record("auth.login_failed", "user", user["id"] if user else None, {"username": who})
+    if blocked_now:
+        audit.record("auth.login_throttled", "user", user["id"] if user else None,
+                     {"username": who, "window_seconds": int(current_app.config["LOGIN_LOCK_SECONDS"])})
 
 
 def load_user_from_request():
@@ -131,6 +159,11 @@ def bootstrap_admin(app) -> str | None:
         if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
             return None
         password = os.environ.get("CV_ADMIN_PASSWORD") or random_password()
+        if os.environ.get("CV_ADMIN_PASSWORD"):   # an operator-chosen first password obeys the same policy
+            problem = password_problem(password, minimum_password_length(app.config), "admin")
+            if problem:
+                raise RuntimeError("CV_ADMIN_PASSWORD is not acceptable: " + problem +
+                                   " Choose a stronger first-admin password (or unset it to get a random one).")
         conn.execute(
             "INSERT INTO users(username, full_name, password_hash, role, created_at) VALUES(?,?,?,?,?)",
             ("admin", "Administrator", hash_password(password), "admin", now_iso()))

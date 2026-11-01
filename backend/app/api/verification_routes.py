@@ -10,6 +10,7 @@ from flask import Blueprint, g, request, send_file
 from ..db import dumps, execute, get_setting, now_iso, query, row_to_dict
 from ..services import audit, models, storage
 from ..services.auth import login_required
+from ..services.throttle import rate_limited
 from ..services.enrollment import load_reference_set, process_or_fail
 from ..signature.compare import decide
 from ..signature.detect import crop_fraction, find_signature
@@ -32,6 +33,7 @@ def signature_health():
 
 @bp.post("/api/signature/preprocess")
 @login_required("admin", "operator")
+@rate_limited()
 def preprocess_preview():
     """Run preprocessing on an uploaded image and return the normalised result (nothing is stored)."""
     _, img, _ = storage.read_upload(request.files.get("file"))
@@ -59,6 +61,7 @@ def _thresholds() -> dict:
 
 @bp.post("/api/verifications")
 @login_required("admin", "operator")
+@rate_limited()
 def verify():
     form = request.form if (request.form or request.files) else (request.get_json(silent=True) or {})
     try:

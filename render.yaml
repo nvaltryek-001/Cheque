@@ -17,6 +17,8 @@ services:
         value: "10"
       - key: CV_PROXY_HOPS       # Render terminates TLS in one proxy: trust one X-Forwarded-For hop
         value: "1"
+      - key: CV_MIN_PASSWORD_LENGTH   # also applies to the first admin password you type in the dashboard
+        value: "12"
     disk:
       name: chequeverify-data
       mountPath: /data

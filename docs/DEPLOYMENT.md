@@ -31,9 +31,30 @@ Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a priva
 `.\start.ps1` (see README) – serves on http://127.0.0.1:5000. Add `--host 0.0.0.0` in `start.ps1` and open
 the Windows firewall port to reach it from other PCs on the LAN.
 
+## Settings that matter for a hosted copy
+| Variable | Default | Hosted recommendation |
+|---|---|---|
+| `CV_ADMIN_PASSWORD` | random, printed once | set it (first start only); it must satisfy the password policy or the server refuses to start |
+| `CV_MIN_PASSWORD_LENGTH` | 8 | 12 (set in `render.yaml`) |
+| `CV_PROXY_HOPS` | 0 | 1 behind Render / one load balancer; 0 when the app is reached directly |
+| `CV_RATE_LIMIT_PER_MIN` | 120 | keep; 0 switches the per-user limit off |
+| `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_IP_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` | 5, 20, 300 | keep |
+| `CV_MAX_IMAGE_PIXELS` | 25000000 | keep (a 300 dpi A4 scan is ≈ 8.7 million) |
+| `CV_HSTS_MAX_AGE` | 31536000 | keep once HTTPS works; 0 while testing |
+| `CV_CORS_ORIGINS` | localhost dev origins (image: empty) | leave empty for the bundled UI |
+
+Locked out after too many wrong passwords? Wait for the window to pass or run `python manage.py unlock-logins`
+inside the container (`docker exec <name> python manage.py unlock-logins`).
+
 ## Continuous integration
-`.github/workflows/ci.yml` runs on every push: backend tests (dataset tests skip automatically), the
-frontend type-check + Vite build, and a Docker build with a health-check smoke test.
+`.github/workflows/ci.yml` runs on every push and weekly. Jobs: backend tests (dataset tests skip
+automatically), frontend type-check + Vite build, `dependency-audit` (`pip-audit`, `npm audit`, uploads a
+generated `package-lock.json`), `private-data-audit` (`scripts/prepush_audit.py --base origin/main`) and a
+Docker job (build, live smoke test, unprivileged user, private files, security headers, persistence across a
+restart, HSTS and client address behind one proxy hop, password policy). Actions are pinned to commit SHAs and
+the workflow token is read-only; Dependabot keeps pip, npm, Actions and Docker current.
+
+Before pushing, run the audit locally with your private terms file: `docs/SECURITY.md` → *Pre-push audit*.
 
 ## Pushing the `chequeverify-v2` branch
 From a clone of the repository where you have push rights:

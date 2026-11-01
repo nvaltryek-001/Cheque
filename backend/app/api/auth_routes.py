@@ -43,9 +43,17 @@ def change_password():
     data = json_body()
     require_fields(data, "current_password", "new_password")
     from werkzeug.security import check_password_hash
+
+    from ..services import throttle
+    key = f"pw:{g.user['id']}"            # separate namespace: usernames cannot contain ':'
+    throttle.check_login(key)
     if not check_password_hash(g.user["password_hash"], str(data["current_password"])):
+        throttle.record_failure(key)
         raise ApiError(400, "invalid_password", "Current password is incorrect.")
-    validate_password(str(data["new_password"]))
+    throttle.record_success(key)
+    if str(data["new_password"]) == str(data["current_password"]):
+        raise ApiError(400, "weak_password", "The new password must differ from the current one.")
+    validate_password(str(data["new_password"]), g.user["username"])
     execute("UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?",
             (hash_password(str(data["new_password"])), g.user["id"]))
     audit.record("auth.change_password", "user", g.user["id"])
@@ -71,7 +79,7 @@ def create_user():
         raise ApiError(400, "validation_error", "Username must be 3–40 letters, digits, '.' or '_'.")
     if data["role"] not in ROLES:
         raise ApiError(400, "validation_error", f"Role must be one of {', '.join(ROLES)}.")
-    validate_password(str(data["password"]))
+    validate_password(str(data["password"]), username)
     if query("SELECT 1 FROM users WHERE username=?", (username,), one=True):
         raise ApiError(409, "duplicate", "That username already exists.")
     uid = execute("INSERT INTO users(username, full_name, password_hash, role, created_at) VALUES(?,?,?,?,?)",
@@ -103,7 +111,7 @@ def update_user(uid: int):
         sets.append("is_active=?"); params.append(1 if data["is_active"] else 0)
         sets.append("token_version=token_version+1"); changes["is_active"] = bool(data["is_active"])
     if data.get("password"):
-        validate_password(str(data["password"]))
+        validate_password(str(data["password"]), user["username"])
         sets.append("password_hash=?"); params.append(hash_password(str(data["password"])))
         sets.append("token_version=token_version+1"); changes["password_reset"] = True
     if not sets:

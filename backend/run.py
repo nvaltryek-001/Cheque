@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from pathlib import Path
 
 
@@ -20,7 +21,12 @@ def load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        value = value.strip()
+        if value[:1] in ("'", '"') and value.count(value[0]) >= 2:      # quoted: the text between the quotes
+            value = value[1:value.index(value[0], 1)]
+        else:                                                              # unquoted: drop a trailing "  # comment"
+            value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
+        os.environ.setdefault(key.strip(), value)
 
 
 def main() -> None:

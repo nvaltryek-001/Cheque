@@ -4,7 +4,7 @@ Living document. Update whenever architecture, dependencies, APIs, environment v
 schema, model behaviour or deployment configuration change.
 Status values: NOT STARTED · IN PROGRESS · BLOCKED · TESTING · COMPLETED (completed = implemented **and** verified).
 
-Last updated: 2026-10-31 · branch `chequeverify-v2` · PR #1 (open, not merged) · nothing deployed.
+Last updated: 2026-11-01 · branch `chequeverify-v2` · PR #1 (open, not merged) · nothing deployed.
 
 ## 1. What the application does
 Web application for Indian CTS-2010 cheques: upload a cheque → OCR of 10 fields with per-field
@@ -44,12 +44,17 @@ Linux/macOS: `./start.sh setup|test|dev`. Docker: `docker build -t chequeverify 
 | `CV_OCR_DATASET`, `CV_SIGNATURE_DATASET` | `dataset`, `signature` | private datasets (read-only) |
 | `CV_OCR_ENGINE` | `auto` | `auto`, `paddle`, `tesseract`, `none` |
 | `CV_PROXY_HOPS` | `0` (Render: `1`) | trusted reverse proxies for client IP |
-| `CV_MAX_UPLOAD_MB`, `CV_TOKEN_MAX_AGE`, `CV_CORS_ORIGINS`, `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` | 10, 28800, localhost:5173, 5, 300 | limits |
+| `CV_MAX_UPLOAD_MB`, `CV_TOKEN_MAX_AGE`, `CV_CORS_ORIGINS` | 10, 28800, localhost:5173 (Docker image: empty) | limits |
+| `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_IP_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` | 5, 20, 300 | sign-in throttle per (client IP, username), per client IP, and the window |
+| `CV_MIN_PASSWORD_LENGTH` | 8 (Render: 12) | password policy; also checked for `CV_ADMIN_PASSWORD` at start-up |
+| `CV_RATE_LIMIT_PER_MIN` | 120 | expensive calls per user per minute (0 = off) |
+| `CV_MAX_IMAGE_PIXELS` | 25000000 | decoded-size limit, checked from the header before decoding |
+| `CV_HSTS_MAX_AGE` | 31536000 | HSTS, sent only on HTTPS (0 = never) |
 
 ## 6. API and database
 API reference: `docs/API.md` (≈60 routes, JSON envelope, roles admin/operator/auditor).
 Tables: `users`, `cheques` (machine fields + human corrections kept separately), `signers`, `specimens`,
-`verifications`, `model_runs`, `settings`, `audit_log` (`backend/app/db.py`).
+`verifications`, `model_runs`, `settings`, `audit_log`, `login_attempts` (sign-in throttle; `backend/app/db.py`).
 
 ## 7. AI/ML workflow (current behaviour)
 - OCR: page normalised to 1600 px; header read at 2× (+ sparse pass for the branch); field regions
@@ -82,18 +87,32 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
 | 5 | Models/reports persistence + root-owned disk | TESTING | entrypoint verified locally (simulated, as root); Docker CI job extended – runs after push |
 | 6 | Real client IP behind proxy | COMPLETED | ProxyFix via `CV_PROXY_HOPS`; test added |
 | 7 | Private file permissions | COMPLETED | umask 077 → 600 files (verified) |
-| 8 | Admin lockout by anyone (5 wrong passwords) | NOT STARTED | per-IP throttling in `services/auth.py` |
-| 9 | CSP / HSTS headers | NOT STARTED | `app/__init__.py` |
+| 8 | Admin lockout by anyone (5 wrong passwords) | COMPLETED | Phase 2: persisted throttle per (IP, username) + per IP, no account lock, uniform answers for unknown users, `Retry-After`, `manage.py unlock-logins`; `tests/test_security.py` |
+| 9 | CSP / HSTS headers | COMPLETED | Phase 2: strict CSP (no inline/eval), HSTS on HTTPS only, Permissions-Policy, COOP/CORP, neutral `Server`. Chromium check (`tests/browser_check.py`, 30 checks) on an esbuild bundle of the sources; HSTS behind a proxy tested with a simulated proxy, real-container check runs in CI |
 | 10 | Canara branch, ICICI dates, Syndicate account extraction; payee marked ok | TESTING | Phase 1 (2026-10-31): fixed on val/train/test; test 196/200, 0 wrong-but-ok (test set not blind – see §9). Needs fresh human-verified cheques |
 | 11 | Human verification of the 40 OCR labels | BLOCKED | needs a person; labels delivered privately |
 | 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection |
 | 13 | Dataset tests in CI | BLOCKED | datasets are private; needs private runner or synthetic fixtures |
 | 15 | Dataset validation (OCR test set + signature dataset) | COMPLETED | `reports/final/DATASET_VALIDATION_REPORT.md`; awaiting owner review before push |
 | 14 | Render deployment | NOT STARTED | needs owner approval and a paid plan for the disk |
+| 16 | Upload memory-exhaustion guard | COMPLETED | Phase 2: pixel limit from the file header before decoding on every upload route; bomb PNG 968 MB → ≈111 MB peak |
+| 17 | Per-user rate limits on heavy endpoints | COMPLETED | Phase 2: `services/throttle.py` (`CV_RATE_LIMIT_PER_MIN`), in memory per process |
+| 18 | Password policy | COMPLETED | Phase 2: length (12 on Render), mix, common/username, ≠ current, first admin checked at start-up |
+| 19 | Pre-push audit (`scripts/prepush_audit.py`) + CI job | COMPLETED | Phase 2: 32 tests; with private terms it found real account numbers/names in an unpushed commit (see §9) |
+| 20 | CI hardening: read-only token, SHA-pinned actions, `pip-audit`, `npm audit`, Dependabot | TESTING | workflow syntax and shell steps validated locally; runs after the first push |
+| 21 | `package-lock.json` and dependency vulnerability scan | BLOCKED | npm/PyPI registries are blocked in the build sandbox (403); CI `dependency-audit` generates the lock and the audit results |
+| 22 | HttpOnly-cookie sessions, MFA/SSO, encryption at rest | NOT STARTED | design decisions for the deployer, see `docs/SECURITY.md` |
 
 ## 9. Known bugs / limitations
-- 2 of 18 wrong OCR values on the test set are still marked "ok" (ICICI payee mid-word mis-reads).
-- Canara branch name not extracted on the test cheques; ICICI boxed dates sometimes missing.
+- OCR (after phase 1, test set, not blind): 4 of 200 fields still wrong, all flagged for review; 44 of 196
+  correct fields are still sent to review (conservative); the Canara branch is always sent to review.
+- Private values were found by the pre-push audit: (a) real account numbers and payee names in the **unpushed**
+  phase 1 commit `9e1c3f6` (scrubbed in `57dba7d`; nothing was pushed — publish through a branch built from the
+  remote tip with cherry-picks so these values never reach GitHub, no history rewrite needed); (b) already on
+  `main` (your original code, untouched): `backend/utils/test_field_extraction_pipeline_patched.py` holds one
+  real account number plus cheque numbers and MICR codes, `confirmed_labels.py` holds dataset file names;
+  (c) already pushed on `chequeverify-v2`: cheque numbers/file names in `reports/final/OCR_DATASET_AUDIT.json`
+  and generic amount-in-words phrases in `test_units.py` (low sensitivity).
 - The signature dataset has no independent genuine sample (each specimen is cropped from its signer's only
   cheque) and no skilled forgeries; ~2/3 of specimens appear to be typeset names. Behaviour on real,
   independently signed genuine signatures and on skilled forgeries is unknown.
@@ -115,3 +134,4 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-10-31 | Blocker fixes: OpenCV golden tests, PDF escaping, OCR row extent/IFSC/branch, signature alteration check, Docker /data persistence, ProxyFix, umask |
 | 2026-10-31 | Dataset validation report; genuine-signature figures withdrawn as GAR; OCR test label corrected (183/200) |
 | 2026-10-31 | Phase 1 OCR: digit-pass account read, 3-rendering payee vote, amount-box re-read, boxed-date families, per-line header reads, IFSC prefix repair, spelling-normalisation flag; `score-ocr` command |
+| 2026-11-01 | Phase 2 security: header-based image size limit, persisted sign-in throttle (no account lock), per-user rate limits, password policy, CSP/HSTS/Permissions-Policy/COOP/CORP, CI hardening + Dependabot, `.env` comment parsing fix, pre-push audit tool; real values removed from tests (`57dba7d`) |

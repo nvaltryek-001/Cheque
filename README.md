@@ -35,7 +35,7 @@ Banks still key in cheque details by hand and compare signatures by eye. This pr
 | Datasets | Live audits of both datasets; manifest-based browser |
 | Models | Readiness assessment; background training/evaluation jobs with history and metrics |
 | Reports | Per-cheque PDF; CSV exports (cheques, verifications, signers, audit log); audit/evaluation report downloads |
-| Security | Token auth, 3 roles, lockout, token revocation, upload validation by content, private storage, audited biometric access, masked account numbers |
+| Security | Token auth, 3 roles, per-client sign-in throttling, per-user rate limits, password policy, token revocation, upload validation by content (size and pixel limits before decoding), CSP/HSTS and other headers, private storage, audited biometric access, masked account numbers, pre-push audit for private data |
 
 ### Screens
 Dashboard · Cheque verification · Cheque detail · Signature verification · Signature enrollment ·
@@ -219,9 +219,11 @@ Summary (details in `docs/SECURITY.md` and `reports/final/SECURITY_AUDIT.md`): s
 with server-side revocation, three roles enforced on every endpoint, enrollment admin-only, specimen
 images never public (admin/operator only, each view audited), uploads validated by content and stored
 under random names, path-traversal protection on every file endpoint, no stack traces or paths in
-errors, CSV formula-injection protection, account numbers masked in lists/exports/PDF, login lockout,
-strict CORS allow-list, security headers. **Not production-banking ready** without HTTPS, an external
-identity provider/MFA, encrypted storage, retention policies and an independent security test.
+errors, CSV formula-injection protection, account numbers masked in lists/exports/PDF, per-client sign-in
+throttling, per-user rate limits, password policy, strict CORS allow-list, Content-Security-Policy, HSTS and
+other security headers, `scripts/prepush_audit.py` against private data in git. **Not production-banking
+ready** without HTTPS, an external identity provider/MFA, encrypted storage, retention policies and an
+independent security test (open items: `docs/SECURITY.md`).
 
 ## 12. Limitations
 

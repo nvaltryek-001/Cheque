@@ -10,6 +10,7 @@ from flask import Blueprint, current_app, g, request, send_file
 from ..db import execute, now_iso, query, row_to_dict
 from ..services import audit, storage
 from ..services.auth import login_required
+from ..services.throttle import rate_limited
 from ..services.datasets import load_signature_manifests
 from ..services.enrollment import add_specimen, check_duplicates, process_or_fail
 from ..signature.preprocess import perceptual_hash
@@ -166,6 +167,7 @@ def lookup():
 # ------------------------------------------------------------------ specimens
 @bp.post("/api/signers/<int:sid>/specimens")
 @login_required("admin")
+@rate_limited()
 def upload_specimen(sid: int):
     signer = _signer(sid)
     if signer["status"] != "active":
@@ -179,6 +181,7 @@ def upload_specimen(sid: int):
 
 @bp.put("/api/specimens/<int:spid>")
 @login_required("admin")
+@rate_limited()
 def replace_specimen(spid: int):
     old = _specimen(spid)
     data, img, name = storage.read_upload(request.files.get("file"))

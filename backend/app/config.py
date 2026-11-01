@@ -44,11 +44,18 @@ class Config:
         "CV_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()]
     MAX_CONTENT_LENGTH = _int("CV_MAX_UPLOAD_MB", 10) * 1024 * 1024
     MAX_BATCH_FILES = _int("CV_MAX_BATCH_FILES", 20)
+    # decoded size limit, checked from the file header before decoding (memory-exhaustion guard)
+    MAX_IMAGE_PIXELS = _int("CV_MAX_IMAGE_PIXELS", 25_000_000)
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"}
     LOGIN_MAX_ATTEMPTS = _int("CV_LOGIN_MAX_ATTEMPTS", 5)
-    LOGIN_LOCK_SECONDS = _int("CV_LOGIN_LOCK_SECONDS", 300)
+    LOGIN_LOCK_SECONDS = _int("CV_LOGIN_LOCK_SECONDS", 300)       # sliding window for failed sign-ins
+    LOGIN_IP_MAX_ATTEMPTS = _int("CV_LOGIN_IP_MAX_ATTEMPTS", 20)  # failures per client IP across all usernames
+    MIN_PASSWORD_LENGTH = _int("CV_MIN_PASSWORD_LENGTH", 8)       # Render blueprint sets 12
+    RATE_LIMIT_PER_MIN = _int("CV_RATE_LIMIT_PER_MIN", 120)       # expensive calls per user per minute (0 = off)
     # number of reverse proxies in front of the app (Render: 1). 0 = trust no X-Forwarded-* headers.
     PROXY_HOPS = _int("CV_PROXY_HOPS", 0)
+    # Strict-Transport-Security max-age, sent only on HTTPS responses (0 = never send)
+    HSTS_MAX_AGE = _int("CV_HSTS_MAX_AGE", 365 * 24 * 3600)
 
     # --- OCR ---------------------------------------------------------------
     OCR_ENGINE = os.environ.get("CV_OCR_ENGINE", "auto")  # auto | paddle | tesseract | none

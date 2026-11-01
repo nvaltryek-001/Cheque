@@ -68,6 +68,9 @@ Image endpoints also require the token – the frontend fetches them as blobs.
 | GET | `/api/system/status` | any | Versions and dataset availability |
 
 Common error codes: `auth_required` 401, `invalid_token` 401, `forbidden` 403, `not_found` 404,
-`validation_error` 400, `unsupported_type` 415, `file_too_large` 413, `corrupted_image` 422,
+`validation_error` 400, `weak_password` 400, `unsupported_type` 415, `file_too_large` 413 (upload size),
+`image_too_large` 413 (decoded pixel count, checked from the header before decoding), `corrupted_image` 422,
 `invalid_signature` 422, `poor_quality` 422, `duplicate_specimen` 409, `duplicate_other_signer` 409,
-`no_reference` 409, `job_running` 409, `account_locked` 429, `internal_error` 500 (no stack traces or paths are returned).
+`no_reference` 409, `job_running` 409, `too_many_attempts` 429 (sign-in / password-check throttle),
+`rate_limited` 429 (per-user limit on uploads, verifications and other heavy calls), `internal_error` 500
+(no stack traces or paths are returned). Every 429 carries a `Retry-After` header (seconds) and `details.retry_after`.

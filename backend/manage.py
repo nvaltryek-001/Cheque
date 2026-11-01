@@ -8,6 +8,7 @@
                                               # score against human-verified labels kept outside git
     python manage.py create-user NAME --role operator
     python manage.py reset-password NAME
+    python manage.py unlock-logins              # clear the sign-in throttle (e.g. your own IP got blocked)
 All dataset access is read-only.
 """
 from __future__ import annotations
@@ -126,6 +127,13 @@ def cmd_score_ocr(args) -> None:
         print(f"masked table (no values): {args.masked_report}")
 
 
+def cmd_unlock_logins(_args) -> None:
+    app = _db()
+    with app.app_context():
+        from app.services import throttle
+        print(f"cleared {throttle.clear_all()} recorded failed sign-in(s)")
+
+
 def _db():
     from app import create_app
     return create_app()
@@ -177,6 +185,7 @@ def main() -> None:
     c.add_argument("--role", default="operator")
     c.add_argument("--full-name", default="")
     c.set_defaults(fn=cmd_create_user)
+    sub.add_parser("unlock-logins").set_defaults(fn=cmd_unlock_logins)
     r = sub.add_parser("reset-password")
     r.add_argument("username")
     r.set_defaults(fn=cmd_reset_password)

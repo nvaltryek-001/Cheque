@@ -1,0 +1,22 @@
+# Dependabot: weekly update pull requests for every dependency ecosystem used here.
+# Security advisories open their own pull requests immediately, whatever this schedule says.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /Frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions       # also keeps the pinned commit SHAs current
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

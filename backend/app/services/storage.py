@@ -6,17 +6,21 @@ rejects anything that resolves outside the area directory."""
 from __future__ import annotations
 
 import hashlib
+import io
 import uuid
+import warnings
 from pathlib import Path
 
 import cv2
 import numpy as np
-from flask import current_app
+from flask import current_app, has_app_context
+from PIL import Image
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from ..api.common import ApiError
 
+DEFAULT_MAX_IMAGE_PIXELS = 25_000_000   # a 600-dpi cheque is ~10 MP; override with CV_MAX_IMAGE_PIXELS
 AREAS = ("cheques", "crops", "specimens", "specimens_processed", "queries", "reports")
 # image magic numbers – the extension alone is not trusted
 _MAGIC = {
@@ -75,21 +79,52 @@ def read_upload(file: FileStorage | None, field: str = "file") -> tuple[bytes, n
     h, w = img.shape[:2]
     if h < 20 or w < 20:
         raise ApiError(422, "image_too_small", "The image is too small to process.")
-    if h * w > 40_000_000:
-        raise ApiError(413, "image_too_large", "Image resolution is too large.")
     return data, img, name
 
 
+def max_pixels() -> int:
+    if has_app_context():
+        return int(current_app.config.get("MAX_IMAGE_PIXELS") or DEFAULT_MAX_IMAGE_PIXELS)
+    return DEFAULT_MAX_IMAGE_PIXELS
+
+
+def declared_size(data: bytes) -> tuple[int, int] | None:
+    """(width, height) read from the file header only – no pixels are decoded.
+    None when the header cannot be read. A 240 KB PNG can declare 225 million pixels and make a decoder
+    allocate ~1 GB, so the size must be known before decoding."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as im:
+                return im.size
+    except Image.DecompressionBombError:
+        return (max_pixels() + 1, 1)              # beyond Pillow's own hard limit
+    except Exception:
+        return None
+
+
 def decode_image(data: bytes) -> np.ndarray | None:
+    """Decode an uploaded image to 8-bit BGR. Raises 413 for images over the pixel limit (checked from
+    the header, before any pixel is decoded); returns None when the data is not a readable image."""
+    size = declared_size(data)
+    if size is None:
+        return None
+    if size[0] * size[1] > max_pixels():
+        raise ApiError(413, "image_too_large",
+                       f"Image resolution is too large (limit {max_pixels() // 1_000_000} megapixels).")
     arr = np.frombuffer(data, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
     if img is None:
         return None
     if img.ndim == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    elif img.shape[2] == 4:  # composite RGBA onto white
-        alpha = img[:, :, 3:4].astype(np.float32) / 255.0
-        img = (img[:, :, :3].astype(np.float32) * alpha + 255 * (1 - alpha)).astype(np.uint8)
+    elif img.shape[2] == 4:  # composite RGBA onto white, in strips so no full-size float copy is made
+        out = np.empty(img.shape[:2] + (3,), np.uint8)
+        for y in range(0, img.shape[0], 256):
+            band = img[y:y + 256]
+            alpha = band[:, :, 3:4].astype(np.float32) / 255.0
+            out[y:y + 256] = (band[:, :, :3].astype(np.float32) * alpha + 255 * (1 - alpha)).astype(np.uint8)
+        img = out
     if img.dtype != np.uint8:
         img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return img

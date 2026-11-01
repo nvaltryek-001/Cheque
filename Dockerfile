@@ -13,7 +13,7 @@ RUN npm run build
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     CV_INSTANCE_DIR=/data/instance CV_MODELS_DIR=/data/models CV_REPORTS_DIR=/data/reports \
-    CV_OCR_ENGINE=tesseract CV_PROXY_HOPS=0 PORT=8000
+    CV_OCR_ENGINE=tesseract CV_PROXY_HOPS=0 CV_CORS_ORIGINS="" PORT=8000
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/* \

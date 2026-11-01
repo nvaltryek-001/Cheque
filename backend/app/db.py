@@ -131,6 +131,16 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+-- failed sign-ins inside the throttling window (services/throttle.py). users.failed_logins / locked_until
+-- are legacy columns from the earlier account-wide lockout and are no longer used.
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    username TEXT NOT NULL,
+    at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_attempts ON login_attempts(ip, username, at);
 """
 
 
