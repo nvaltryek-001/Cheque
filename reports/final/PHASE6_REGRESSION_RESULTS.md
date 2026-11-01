@@ -43,7 +43,7 @@ pre-push audit (`test_prepush_audit.py` 17), frontend theme and CSP rules (`test
 ## 3. Frontend build and integration
 
 * **Production build.** The `frontend` job on GitHub runs `npm install` and `npm run build` (`tsc --noEmit` and `vite build`) with the real toolchain: passed on every
-  commit checked (`335baf8`, `93c2f0c`, `1215ebc`). The same build runs inside the Docker image build, which also passed. Lint is not configured in this project.
+  commit checked (`335baf8`, `93c2f0c`, `1215ebc`, `23df57e`). The same build runs inside the Docker image build, which also passed. Lint is not configured in this project.
 * **A successful build is not a working application**, so the page was also driven in a real browser (Chromium) against the real backend, under the strict
   Content-Security-Policy. The development sandbox cannot run Vite, so those runs used an esbuild bundle of the same sources; the GitHub build uses Vite.
   * `backend/tests/browser_check.py`: 60 of 60 checks passed (e-mail sign-in with code and approval, administrator sign-in, enrollment workflow, navigation, no policy violations).

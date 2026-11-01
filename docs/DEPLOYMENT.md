@@ -21,6 +21,8 @@ Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a priva
 1. Make sure the branch you want to run is on GitHub (see *Pushing* below). Nothing needs to be merged into `main`.
 2. render.com → New → **Blueprint** → connect `nvaltryek-001/cheque` → in the Blueprint settings choose the branch
    (for example `chequeverify-v2`). Render reads `render.yaml` from that branch.
+   Shortcut with the repository and branch filled in (the repository is public, so Render needs no GitHub connection):
+   <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2>
 3. Enter a value for `CV_ADMIN_PASSWORD` when asked (12 or more characters; it is not stored in git) → **Apply**.
    Render builds the Dockerfile (the first build takes several minutes) and gives you an
    `https://chequeverify-ai-xxxx.onrender.com` URL. Every push to the linked branch redeploys; add `[skip render]`

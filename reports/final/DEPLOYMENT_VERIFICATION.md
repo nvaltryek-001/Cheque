@@ -32,19 +32,21 @@ then only the administrator sign-in is offered. Every setting is listed in `docs
 The job `docker` in `.github/workflows/ci.yml` builds the image from the repository and runs it as a hosted disk would: a root-owned
 folder mounted at `/data`.
 
-| Check | `335baf8` | `93c2f0c` | `1215ebc` (newest checked) |
-|---|---|---|---|
-| Image builds, including the real `npm run build` | passed | passed | passed |
-| Live workflow smoke test inside the container (32 checks: sign-in, signer, enrollment, cheque upload with OCR, signature detection and verification, review, PDF and CSV, duplicate refusal, roles, models loaded) | passed | passed | passed |
-| Server runs unprivileged (uid 10001), database and files private (mode 600) | passed | passed | passed |
-| Security headers on the page and on the API | passed | passed | passed |
-| All data identical after a container restart (users, settings, signers, specimens, cheques, queries) | passed | passed | passed |
-| `docker stop` (SIGTERM to the server) ends it cleanly in under 8 s, exit code 0 | passed | passed | passed |
-| Redeploy rehearsal: remove the container, create a new one on the same disk, compare everything | passed | passed | passed |
-| Hard kill (SIGKILL, as after an out-of-memory kill), restart, database integrity check | passed | passed | passed |
-| Behind one reverse proxy: HSTS sent over HTTPS, client address taken from `X-Forwarded-For` | **failed** | passed | passed |
-| Memory: the largest accepted images, eight at once, inside a 512 MB container (the Render Starter size): no out-of-memory kill | passed | passed | passed |
-| Read-only root filesystem: the application writes only to `/data` and `/tmp` | **failed** | **failed** | passed |
+| Check | `335baf8` | `93c2f0c` | `1215ebc` | `23df57e` (newest checked) |
+|---|---|---|---|---|
+| Image builds, including the real `npm run build` | passed | passed | passed | passed |
+| Live workflow smoke test inside the container (32 checks: sign-in, signer, enrollment, cheque upload with OCR, signature detection and verification, review, PDF and CSV, duplicate refusal, roles, models loaded) | passed | passed | passed | passed |
+| Server runs unprivileged (uid 10001), database and files private (mode 600) | passed | passed | passed | passed |
+| Security headers on the page and on the API | passed | passed | passed | passed |
+| All data identical after a container restart (users, settings, signers, specimens, cheques, queries) | passed | passed | passed | passed |
+| `docker stop` (SIGTERM to the server) ends it cleanly in under 8 s, exit code 0 | passed | passed | passed | passed |
+| Redeploy rehearsal: remove the container, create a new one on the same disk, compare everything | passed | passed | passed | passed |
+| Hard kill (SIGKILL, as after an out-of-memory kill), restart, database integrity check | passed | passed | passed | passed |
+| Behind one reverse proxy: HSTS sent over HTTPS, client address taken from `X-Forwarded-For` | **failed** | passed | passed | passed |
+| Memory: the largest accepted images, eight at once, inside a 512 MB container (the Render Starter size): no out-of-memory kill | passed | passed | passed | passed |
+| Read-only root filesystem: the application writes only to `/data` and `/tmp` | **failed** | **failed** | passed | passed |
+
+`23df57e` carries the final code (the demo-sample feature included); the commits after the last code change (`ba79a2a`) change documentation only. All 13 steps passed on its push run and on its pull-request run, and so did the other four jobs (`backend`, `frontend`, `dependency-audit`, `private-data-audit`).
 
 What the failures were (all found by these checks, none by chance):
 * **Proxy step on `335baf8`: a real application bug.** Waitress 3 removes `X-Forwarded-*` headers before the application sees them, so
@@ -106,3 +108,7 @@ exists (the development machine, or a server given `CV_OCR_DATASET`).
 Render dashboard, then *New +*, *Blueprint*, repository `nvaltryek-001/Cheque`, branch `chequeverify-v2` (no merge is needed), enter `CV_ADMIN_PASSWORD`
 (12 or more characters, letters and digits or symbols), *Apply*. When the first deploy is live, open the service address and use *Administrator sign-in* with the user
 `admin`. Starter plan and 1 GB disk are paid. Then open `<address>/api/health`: it should answer `"status": "ok"`.
+
+Shortcut: <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2> opens the same Blueprint page with the repository and branch filled in.
+The link format is taken from Render's documentation (a public repository needs no GitHub connection there); it was not opened from here because it needs a Render login.
+If the first deploy does not start by itself, use *Manual Deploy*, *Deploy latest commit*.

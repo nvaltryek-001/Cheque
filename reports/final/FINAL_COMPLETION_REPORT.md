@@ -82,7 +82,7 @@ found on the way: `PHASE6_REGRESSION_RESULTS.md`.
 
 ## 4. Integration test results
 Chromium against the real backend, under the strict Content-Security-Policy: 60 of 60 checks (sign-in by e-mailed code with approval, administrator sign-in, enrollment, navigation, no policy violations) and 6 of 6 for the sample flow
-(open a sample, *Process with OCR*, fields shown, no script errors). Live API workflow: 32 of 32, in the sandbox, in a read-only-tree rehearsal, and inside the real container on GitHub. Real-container job on GitHub, newest commit checked (`1215ebc`):
+(open a sample, *Process with OCR*, fields shown, no script errors). Live API workflow: 32 of 32, in the sandbox, in a read-only-tree rehearsal, and inside the real container on GitHub. Real-container job on GitHub, checked on `1215ebc` and again on `23df57e` (which carries the final code; push and pull-request runs, all five jobs green on both):
 all 13 steps passed (image build, smoke test, unprivileged and private, headers, restart, clean stop, redeploy, hard kill, proxy headers, 512 MB memory, read-only root filesystem).
 
 ## 5. Dataset processing results (details: `DATASET_TEST_RESULTS.md`)

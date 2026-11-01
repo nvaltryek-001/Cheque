@@ -197,6 +197,8 @@ docker build -t chequeverify .
 docker run -p 8000:8000 -e CV_ADMIN_PASSWORD='Choose-a-strong-one-123' -v chequeverify-data:/data chequeverify
 ```
 Or connect this repository to Render as a Blueprint (`render.yaml`). Full guide: `docs/DEPLOYMENT.md`.
+Shortcut that opens Render's Blueprint page with this repository and the `chequeverify-v2` branch filled in (a paid Starter plan with a 1 GB disk; Render asks for `CV_ADMIN_PASSWORD`):
+<https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2>
 GitHub Actions (`.github/workflows/ci.yml`) runs the backend tests, the Vite build, a dependency audit, the private-data audit
 and, in a real container, the live smoke test, persistence across restart, redeploy and hard kill, a clean `docker stop`, the
 reverse-proxy headers and a 512 MB memory check (results: `reports/final/DEPLOYMENT_VERIFICATION.md`).
