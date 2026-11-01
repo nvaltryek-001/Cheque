@@ -1,0 +1,150 @@
+{
+  "protocol_version": "1",
+  "generated_at": "2026-11-01T04:21:54+00:00",
+  "dataset": "signature/ as delivered",
+  "split": "all",
+  "final": false,
+  "model_version": "",
+  "population": {
+    "signers": 120,
+    "genuine_specimens": 120,
+    "signers_with_two_or_more_genuine_specimens": 0,
+    "skilled_forgeries_listed": 0,
+    "synthetic_alterations_set_aside": 240
+  },
+  "validity": {
+    "checks": [
+      {
+        "id": "signer_level_split",
+        "status": "pass",
+        "message": "120 signers, each in exactly one split (genuine specimens train/val/test: 80/20/20)",
+        "scope": "run"
+      },
+      {
+        "id": "independent_genuine_signers",
+        "status": "fail",
+        "message": "0 of 120 signers have two or more genuine specimens (most specimens per signer: 1); the manifest has no signing-date column and each specimen was cut from the signer's cheque, so there are no independent genuine queries: genuine acceptance and false rejection are NOT MEASURABLE",
+        "scope": "run"
+      },
+      {
+        "id": "skilled_forgeries",
+        "status": "fail",
+        "message": "0 skilled forgeries (the manifest records no forger); the 240 'forged' rows are script-generated stroke edits of the specimen itself: false acceptance of skilled forgeries is NOT MEASURABLE",
+        "scope": "metric"
+      },
+      {
+        "id": "synthetic_alterations_kept_apart",
+        "status": "pass",
+        "message": "240 synthetic alterations are reported only as edited-copy detection, never as forgeries",
+        "scope": "metric"
+      },
+      {
+        "id": "test_set_used_once",
+        "status": "warn",
+        "message": "the test split of this dataset was used repeatedly while the signature model was developed: treat any number taken from it as exploratory",
+        "scope": "run"
+      }
+    ],
+    "valid": false,
+    "failed": [
+      "independent_genuine_signers",
+      "skilled_forgeries"
+    ],
+    "warnings": [
+      "test_set_used_once"
+    ]
+  },
+  "metrics": {
+    "genuine_match_rate": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "genuine_review_rate": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "genuine_mismatch_rate": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "random_forgery_match_rate": {
+      "measurable": true,
+      "caveat": "single-reference baseline only: the genuine queries are simulated re-captures of the reference image, not independent signings"
+    },
+    "random_forgery_review_rate": {
+      "measurable": true,
+      "caveat": "single-reference baseline only: the genuine queries are simulated re-captures of the reference image, not independent signings"
+    },
+    "random_forgery_mismatch_rate": {
+      "measurable": true,
+      "caveat": "single-reference baseline only: the genuine queries are simulated re-captures of the reference image, not independent signings"
+    },
+    "random_forgery_auc": {
+      "measurable": true,
+      "caveat": "single-reference baseline only: the genuine queries are simulated re-captures of the reference image, not independent signings"
+    },
+    "random_forgery_eer": {
+      "measurable": true,
+      "caveat": "single-reference baseline only: the genuine queries are simulated re-captures of the reference image, not independent signings"
+    },
+    "skilled_forgery_match_rate": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "skilled_forgery_review_rate": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "skilled_forgery_mismatch_rate": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "skilled_forgery_auc": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "skilled_forgery_eer": {
+      "measurable": false,
+      "reason": "one genuine specimen per signer, cut from the signer's cheque; no signing dates; no real forgeries"
+    },
+    "edited_copy_detection": {
+      "measurable": true,
+      "caveat": "240 synthetic stroke edits of the specimen itself; about 10 % contain no visible edit and cannot be detected; says nothing about forgeries by another person"
+    }
+  },
+  "config": {
+    "seed": 20261101,
+    "fractions": [
+      0.6,
+      0.2,
+      0.2
+    ],
+    "reference_min_specimens": 5,
+    "reference_min_sessions": 2,
+    "min_queries": 3,
+    "min_signers": 30,
+    "min_signers_hard": 5,
+    "forgery_min_per_signer": 3,
+    "forgery_min_forgers": 2,
+    "random_forgeries_per_signer": 5,
+    "bootstrap": 1000,
+    "same_signing_agreement": 0.98,
+    "duplicate_hamming": 6,
+    "target_far": 0.01,
+    "target_frr": 0.05
+  },
+  "claims": {
+    "allowed": [
+      "Edited copies of an enrolled specimen (synthetic stroke additions or erasures) are detected by an alignment check; the counts are in reports/final/MODEL_EVALUATION.md. This is tamper-evidence for copied images, not forgery detection.",
+      "On a single-reference baseline with simulated re-captures, signatures of different signers are separated by the similarity score (same report)."
+    ],
+    "not_allowed": [
+      "Any genuine-acceptance or false-rejection rate for real signers.",
+      "Any statement about resistance to skilled forgery.",
+      "Population-level accuracy: every signer has one specimen, so no signer can be evaluated with independent signatures.",
+      "Detection of forgeries on the strength of synthetic alterations: those are edits of a specimen and may only be cited as edited-copy detection.",
+      "Performance on whole cheques, other scanners, or signatures captured differently from the evaluation data.",
+      "Suitability for production use: this protocol measures one component on one data set."
+    ]
+  }
+}

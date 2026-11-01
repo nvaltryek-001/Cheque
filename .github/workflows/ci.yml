@@ -1,0 +1,259 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"   # weekly: new advisories appear without any code change
+
+# Least privilege: no job needs to write to the repository or to any other GitHub resource.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to commit SHAs (the comment names the release line); Dependabot keeps them current.
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install Tesseract
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+      - name: Install Python packages
+        run: pip install -r backend/requirements.txt
+      - name: Run tests
+        working-directory: backend
+        # dataset-dependent tests are skipped automatically: datasets are private and not in git
+        run: |
+          set -o pipefail
+          python -m pytest -q -rfE 2>&1 | tee pytest-output.txt
+      - name: Annotate test failures
+        if: failure()
+        working-directory: backend
+        run: |
+          grep -E "^(FAILED|ERROR)|Error:" pytest-output.txt | head -10 | while IFS= read -r line; do
+            echo "::error title=pytest::$line"
+          done
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Install (exactly the versions in package-lock.json)
+        working-directory: Frontend
+        run: npm ci --no-audit --no-fund
+      - name: Type-check and build
+        working-directory: Frontend
+        run: npm run build
+
+  # Known-vulnerability scan of the dependencies (also weekly, see "schedule" above).
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Python dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Frontend dependencies (npm ci from package-lock.json)
+        working-directory: Frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Frontend dependencies that ship in the page (npm audit --omit=dev, high and critical)
+        working-directory: Frontend
+        run: npm audit --omit=dev --audit-level=high
+      # The build tools (Vite and what it pulls in) are not part of the deployed image: the Docker build stage compiles the
+      # page and only the compiled files are copied on. They are audited too (since Vite 6.4.5 the whole tree is clean), so a
+      # new high or critical advisory in them turns this job red, on every push and in the weekly run.
+      - name: Frontend build tools (npm audit, whole tree, high and critical)
+        working-directory: Frontend
+        run: |
+          status=0
+          npm audit --audit-level=high || status=$?
+          if [ "$status" -ne 0 ]; then
+            npm audit --json 2>/dev/null | python3 ../scripts/npm_audit_annotations.py high error || true
+          fi
+          exit $status
+
+  # Everything this branch adds to main is searched for secrets, datasets, cheque images, databases and
+  # environment files. Private terms (real account numbers, names) can only be searched locally: see docs/SECURITY.md.
+  private-data-audit:
+    if: github.event_name != 'schedule' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Pre-push audit against main
+        run: python3 scripts/prepush_audit.py --base origin/main
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build image
+        run: docker build -t chequeverify .
+      - name: Start container (root-owned /data, like a hosted persistent disk)
+        run: |
+          sudo mkdir -p /srv/cvdata && sudo chown root:root /srv/cvdata && sudo chmod 755 /srv/cvdata
+          docker run -d --name cv -p 8000:8000 -v /srv/cvdata:/data \
+            -e CV_ADMIN_PASSWORD=Ci-pass-12345 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health && break; sleep 2; done
+          curl -fs http://127.0.0.1:8000/api/health
+      - name: Live workflow smoke test inside the container
+        run: docker exec cv python tests/smoke_live.py http://127.0.0.1:8000 Ci-pass-12345
+      - name: Fingerprint everything the API can see (users, settings, signers, specimen / cheque / query images, models, reports)
+        run: |
+          docker exec cv python tests/persistence_check.py snapshot http://127.0.0.1:8000 Ci-pass-12345 > "$RUNNER_TEMP/state.json"
+          chmod 600 "$RUNNER_TEMP/state.json"
+      - name: Server runs unprivileged and data is private
+        run: |
+          # docker top needs the pid column in the ps format (without it: "Couldn't find PID field in ps output")
+          docker top cv -eo pid,uid,args | tee "$RUNNER_TEMP/top.txt"
+          UIDS=$(awk '/run\.py --prod/ {print $2}' "$RUNNER_TEMP/top.txt" | sort -u | tr '\n' ' ')
+          echo "user id of the server process: ${UIDS}"
+          test "${UIDS}" = "10001 "
+          MODE=$(sudo stat -c "%a %u" /srv/cvdata/instance/chequeverify.db)
+          echo "database mode and owner: ${MODE}"
+          test "${MODE}" = "600 10001"
+      - name: Security headers on the page and on the API
+        if: ${{ !cancelled() }}
+        run: |
+          PAGE=$(curl -si http://127.0.0.1:8000/)
+          API=$(curl -si http://127.0.0.1:8000/api/health)
+          echo "$PAGE" | grep -i "^content-security-policy: default-src 'self'; script-src 'self'" >/dev/null
+          echo "$API"  | grep -i "^content-security-policy: default-src 'none'" >/dev/null
+          for h in "x-content-type-options: nosniff" "x-frame-options: DENY" "referrer-policy: no-referrer" \
+                   "permissions-policy:" "cross-origin-opener-policy: same-origin"; do
+            echo "$API" | grep -i "^$h" >/dev/null || { echo "missing header: $h"; exit 1; }
+          done
+          if echo "$PAGE$API" | grep -i "^strict-transport-security" >/dev/null; then echo "HSTS sent over plain HTTP"; exit 1; fi
+      - name: Data survives a container restart
+        if: ${{ !cancelled() }}
+        run: |
+          docker restart cv
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health && break; sleep 2; done
+          TOKEN=$(curl -fs -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"Ci-pass-12345"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
+          curl -fs "http://127.0.0.1:8000/api/cheques" -H "Authorization: Bearer $TOKEN" \
+            | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["meta"]["total"]>=1,d;print("cheques after restart:",d["meta"]["total"])'
+          docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
+      - name: A stop is prompt and clean (docker stop sends SIGTERM to PID 1, which has no default action for it)
+        if: ${{ !cancelled() }}
+        run: |
+          start=$(date +%s)
+          docker stop cv
+          elapsed=$(( $(date +%s) - start ))
+          code=$(docker inspect -f '{{.State.ExitCode}}' cv)
+          echo "stopped after ${elapsed}s with exit code ${code}"
+          test "$code" = 0
+          test "$elapsed" -lt 8
+          sudo find /srv/cvdata -name '.tmp-*' | tee /dev/stderr | wc -l | grep -qx 0
+      - name: Redeploy rehearsal - remove the container, create a new one on the same disk, compare everything
+        if: ${{ !cancelled() }}
+        run: |
+          docker rm cv
+          docker run -d --name cv -p 8000:8000 -v /srv/cvdata:/data \
+            --memory=512m --memory-swap=512m -e CV_ADMIN_PASSWORD=Ci-pass-12345 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health >/dev/null && break; sleep 2; done
+          docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
+          docker logs cv 2>&1 | grep -E "^seed: [0-9]+ current$"
+      - name: Hard kill (SIGKILL, as after an out-of-memory kill or an expired grace period), then start again
+        if: ${{ !cancelled() }}
+        run: |
+          docker kill cv
+          docker start cv
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health >/dev/null && break; sleep 2; done
+          docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
+          docker exec -i cv python - <<'PY'
+          import sqlite3
+          rows = [r[0] for r in sqlite3.connect("/data/instance/chequeverify.db").execute("PRAGMA integrity_check")]
+          assert rows == ["ok"], rows
+          print("database integrity_check: ok")
+          PY
+      - name: Behind one reverse proxy (as on Render) HSTS and the client address are honoured
+        if: ${{ !cancelled() }}
+        run: |
+          sudo mkdir -p /srv/cvdata2 && sudo chown root:root /srv/cvdata2
+          docker run -d --name cvp -p 8001:8000 -v /srv/cvdata2:/data \
+            -e CV_PROXY_HOPS=1 -e CV_MIN_PASSWORD_LENGTH=12 -e CV_ADMIN_PASSWORD=Ci-pass-123456 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8001/api/health >/dev/null && break; sleep 2; done
+          curl -si -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8001/api/health \
+            | grep -i "^strict-transport-security: max-age=" >/dev/null
+          curl -s -o /dev/null -X POST http://127.0.0.1:8001/api/auth/login -H 'Content-Type: application/json' \
+            -H 'X-Forwarded-For: 203.0.113.9' -d '{"username":"admin","password":"wrong-password-1"}'
+          TOKEN=$(curl -fs -X POST http://127.0.0.1:8001/api/auth/login -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"Ci-pass-123456"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
+          curl -fs "http://127.0.0.1:8001/api/audit-log?per_page=100" -H "Authorization: Bearer $TOKEN" | grep -q "203.0.113.9"
+          # the weak-password policy is enforced
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8001/api/users \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"username":"weakuser","password":"Short-1a","role":"operator"}')
+          test "$code" = 400
+      - name: Memory - the largest accepted images, eight at once, inside a 512 MB container (the Render Starter plan)
+        if: ${{ !cancelled() }}
+        run: |
+          sudo mkdir -p /srv/cvdata3 && sudo chown root:root /srv/cvdata3
+          docker run -d --name cvm -p 8002:8000 -v /srv/cvdata3:/data --memory=512m --memory-swap=512m \
+            -e CV_MIN_PASSWORD_LENGTH=12 -e CV_MAX_IMAGE_PIXELS=12000000 -e CV_MAX_CONCURRENT_IMAGES=2 \
+            -e CV_ADMIN_PASSWORD=Ci-pass-123456 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8002/api/health >/dev/null && break; sleep 2; done
+          python3 scripts/memory_probe.py http://127.0.0.1:8002 Ci-pass-123456 --side 3462 --parallel 8
+          test "$(docker inspect -f '{{.State.OOMKilled}}' cvm)" = false
+          echo "peak memory of the container (cgroup): $(docker exec cvm cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo n/a) bytes"
+      - name: Read-only root filesystem - the application writes only to /data and /tmp
+        if: ${{ !cancelled() }}
+        run: |
+          sudo mkdir -p /srv/cvdata4 && sudo chown root:root /srv/cvdata4
+          docker run -d --name cvr -p 8003:8000 -v /srv/cvdata4:/data --read-only --tmpfs /tmp \
+            -e CV_ADMIN_PASSWORD=Ci-pass-12345 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8003/api/health >/dev/null && break; sleep 2; done
+          # The probe runs inside the container, where the server listens on 8000 (8003 is only the host side).
+          docker exec cvr python tests/smoke_live.py http://127.0.0.1:8000 Ci-pass-12345
+      - name: No disk at all (the Render Free plan) - starts on Render's port with the Free settings, works, and a replacement container starts empty
+        if: ${{ !cancelled() }}
+        run: |
+          # render.yaml (Free): no volume, PORT 10000, one image at a time, a long queue. The data folder is then an ordinary
+          # folder of the container, so everything in it is gone with the container - the application must say so, not hide it.
+          FREE="-e PORT=10000 -e CV_MAX_CONCURRENT_IMAGES=1 -e CV_IMAGE_QUEUE_SECONDS=120 -e CV_PROXY_HOPS=1 -e CV_MIN_PASSWORD_LENGTH=12 -e CV_ADMIN_PASSWORD=Ci-pass-12345"
+          docker run -d --name cvf -p 8004:10000 $FREE chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8004/api/health >/dev/null && break; sleep 2; done
+          curl -fs http://127.0.0.1:8004/api/health
+          docker exec cvf python tests/smoke_live.py http://127.0.0.1:10000 Ci-pass-12345
+          docker top cvf -eo pid,uid,args | awk '/run\.py --prod/ {print $2}' | sort -u | grep -qx 10001
+          docker logs cvf 2>&1 | grep -q "temporary storage" || { echo "the start-up log does not warn that the data folder is temporary"; exit 1; }
+          docker rm -f cvf
+          docker run -d --name cvf2 -p 8004:10000 $FREE chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8004/api/health >/dev/null && break; sleep 2; done
+          TOKEN=$(curl -fs -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"Ci-pass-12345"}' http://127.0.0.1:8004/api/auth/login | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["token"])')
+          TOTAL=$(curl -fs -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8004/api/cheques?per_page=1' | python3 -c 'import sys,json; print(json.load(sys.stdin)["meta"]["total"])')
+          echo "cheques held by the replacement container: $TOTAL"
+          test "$TOTAL" = "0"
+      - name: Explain failures (written as annotations, so the reasons can be read without opening the job log)
+        if: failure()
+        run: |
+          emit() { printf '::error title=%s::%s\n' "$1" "$(printf '%s' "$2" | head -c 5000 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"; }
+          emit "containers" "$(docker ps -a --format '{{.Names}}: {{.Status}}' 2>&1)"
+          emit "cvr (read-only) logs" "$(docker logs cvr 2>&1 | tail -n 40)"
+          emit "cvp (proxy) logs" "$(docker logs cvp 2>&1 | tail -n 25)"
+          emit "cvp HSTS probe" "$(curl -si -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8001/api/health 2>&1 | head -n 14)"
+          emit "cvf (Free plan, no disk) logs" "$(docker logs cvf 2>&1 | tail -n 40; docker logs cvf2 2>&1 | tail -n 20)"
+          emit "cvr smoke probe" "$(docker exec cvr python tests/smoke_live.py http://127.0.0.1:8000 Ci-pass-12345 2>&1 | tail -n 25)"
+      - name: Container logs
+        if: always()
+        run: for c in cv cvp cvm cvr cvf cvf2; do echo "=== $c"; docker logs $c 2>&1 | tail -n 80 || true; done

@@ -1,0 +1,110 @@
+{
+  "dataset": "signature",
+  "generated_at": "2026-10-31T06:33:31+00:00",
+  "issues": [
+    {
+      "severity": "warning",
+      "message": "Only one genuine specimen per signer \u2013 signer-specific learning is not possible."
+    }
+  ],
+  "root_exists": true,
+  "manifest_columns": {
+    "genuine": [
+      "filename",
+      "bank",
+      "signer_id",
+      "split"
+    ],
+    "altered": [
+      "filename",
+      "bank",
+      "target_signer_id",
+      "split"
+    ]
+  },
+  "manifest_dir_name": "signature",
+  "genuine_rows": 120,
+  "altered_rows": 240,
+  "unique_signers": 120,
+  "specimens_per_signer": {
+    "1": 120
+  },
+  "altered_per_target": {
+    "2": 120
+  },
+  "signers_per_split": {
+    "test": 20,
+    "train": 80,
+    "val": 20
+  },
+  "genuine_per_bank_and_split": {
+    "axis": {
+      "train": 20,
+      "test": 5,
+      "val": 5
+    },
+    "canara": {
+      "train": 20,
+      "test": 5,
+      "val": 5
+    },
+    "icici": {
+      "train": 20,
+      "test": 5,
+      "val": 5
+    },
+    "syndicate": {
+      "train": 20,
+      "test": 5,
+      "val": 5
+    }
+  },
+  "formats": {
+    "genuine": {
+      "jpeg": 116,
+      "png": 4
+    },
+    "altered": {
+      "jpeg": 232,
+      "png": 8
+    }
+  },
+  "image_size": {
+    "genuine": {
+      "min_w": 76,
+      "max_w": 647,
+      "median_w": 293,
+      "min_h": 31,
+      "max_h": 152,
+      "median_h": 73
+    },
+    "altered": {
+      "min_w": 76,
+      "max_w": 647,
+      "median_w": 293,
+      "min_h": 31,
+      "max_h": 152,
+      "median_h": 73
+    }
+  },
+  "missing_images": [],
+  "corrupted_images": [],
+  "invalid_split_labels": [],
+  "unknown_bank_labels": [],
+  "duplicate_filenames_in_manifests": [],
+  "duplicate_content_groups": [],
+  "near_duplicate_genuine_across_signers": [],
+  "signers_in_multiple_splits": [],
+  "signers_with_multiple_banks": [],
+  "altered_unmapped_target": [],
+  "altered_split_differs_from_target": [],
+  "altered_bank_differs_from_target": [],
+  "altered_filename_stem_differs_from_target": [],
+  "files_on_disk_not_in_manifest": [],
+  "feasibility": {
+    "binary_genuine_vs_synthetic_alteration": "feasible (with caveats: alterations are synthetic edits of the same image)",
+    "signer_specific_trained_model": "BLOCKED \u2013 one genuine specimen per signer; no within-signer variation to learn from",
+    "siamese_or_metric_learning": "BLOCKED \u2013 needs multiple independent genuine specimens per signer and real skilled forgeries",
+    "independent_evaluation": "limited \u2013 test signers are disjoint from train signers, but positives must be simulated re-captures"
+  }
+}

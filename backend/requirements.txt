@@ -1,22 +1,16 @@
-Flask>=3.0,<4
-Flask-CORS>=4.0
-opencv-python>=4.8
-numpy>=1.26
-requests>=2.31
-Werkzeug>=3.0
-python-dotenv>=1.0
+# Core (tested in the build environment with the versions in brackets)
+Flask>=3.0,<4            # [3.1.3]
+numpy>=1.26              # [2.5.3]
+opencv-python-headless>=4.8,<5   # SIFT + HOG are in the 4.x main package (HOG moved out in 5.x)
+reportlab>=4.0           # [5.0.1] PDF reports
+Pillow>=10               # image header check before decoding (also a reportlab dependency)
+waitress>=3.0            # production WSGI server (python run.py --prod)
 
-# Optional: For PaddleOCR integration (uncomment when integrating)
-# paddleocr==2.7.0.3
-# paddlepaddle==2.5.1
+# Tests
+pytest>=8                # [9.1.1]
 
-# Optional: For Qwen2.5-VL integration (uncomment when integrating)
-# transformers==4.35.0
-# pillow==10.0.0
-# torch==2.0.0
-
-# Development
-pytest==7.4.3
-pytest-cov==4.1.0
-black==23.11.0
-flake8==6.1.0
+# OCR engine: EITHER keep your existing PaddleOCR 3.x environment (auto-detected) ...
+#   paddlepaddle / paddleocr>=3.0   (install per https://www.paddleocr.ai)
+# ... OR install the Tesseract 5 binary (no Python package needed):
+#   Windows: https://github.com/UB-Mannheim/tesseract/wiki  (set CV_TESSERACT_CMD if not on PATH)
+#   Ubuntu:  sudo apt install tesseract-ocr

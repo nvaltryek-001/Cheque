@@ -1,0 +1,10 @@
+.git
+legacy
+dataset
+signature
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+backend/instance
+backend/.env

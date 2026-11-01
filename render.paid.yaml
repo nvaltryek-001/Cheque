@@ -1,0 +1,45 @@
+# Render Blueprint, PAID variant: Starter plan + 1 GB persistent disk, so users, cheques, signers and models survive restarts and redeploys.
+# The Free-plan blueprint (no disk, data is erased on every restart) is render.yaml - see docs/DEPLOYMENT.md.
+# To use this one: Dashboard → New → Blueprint → pick this repository → choose render.paid.yaml as the Blueprint file
+# (Render lets you change the file name during setup) → set CV_ADMIN_PASSWORD → Apply.
+# Spec: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: chequeverify-ai
+    runtime: docker
+    plan: starter            # a persistent disk needs a paid plan; on "free" all data is lost on restart
+    healthCheckPath: /api/health
+    envVars:
+      - key: CV_SECRET_KEY
+        generateValue: true
+      - key: CV_ADMIN_PASSWORD
+        sync: false          # you type it in the dashboard; never commit it
+      - key: PORT                # Render's default (10000), written out so the container, its health check and Render agree
+        value: "10000"
+      - key: CV_INSTANCE_DIR
+        value: /data/instance
+      - key: CV_MAX_UPLOAD_MB
+        value: "10"
+      # The Starter plan has 512 MB of memory. Measured in a rehearsal (scripts/deploy_simulation.py): a 25-megapixel scan
+      # costs about 250 MB while it is processed and four at once peaked above 1 GB, which ends in a kill and a restart.
+      # 12 megapixels covers a full 600-dpi cheque (10.7 MP); at most 2 images are processed at the same moment and
+      # further requests wait. Raise both only together with a larger plan.
+      - key: CV_MAX_IMAGE_PIXELS
+        value: "12000000"
+      - key: CV_MAX_CONCURRENT_IMAGES
+        value: "2"
+      - key: CV_PROXY_HOPS       # Render terminates TLS in one proxy: trust one X-Forwarded-For hop
+        value: "1"
+      - key: CV_MIN_PASSWORD_LENGTH   # also applies to the first admin password you type in the dashboard
+        value: "12"
+      # Sign-in by institutional email (docs/AUTHENTICATION.md). It stays off, and only the administrator sign-in is
+      # offered, until a mail server is configured. Add these in the dashboard (Environment) once you have chosen a
+      # mail service - a Blueprint only prompts for sync:false values when it is first created and ignores keys added
+      # later, and never put their values in this file:
+      #   CV_SMTP_HOST, CV_SMTP_USER, CV_SMTP_FROM, CV_SMTP_PASSWORD (secret), optional CV_ADMIN_EMAILS
+      - key: CV_EMAIL_DELIVERY
+        value: smtp
+    disk:
+      name: chequeverify-data
+      mountPath: /data
+      sizeGB: 1

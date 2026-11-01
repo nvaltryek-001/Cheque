@@ -1,0 +1,150 @@
+{
+  "dataset": "ocr",
+  "generated_at": "2026-11-01T15:56:06+00:00",
+  "root_exists": true,
+  "issues": [
+    {
+      "severity": "info",
+      "message": "No OCR transcription labels in the dataset."
+    }
+  ],
+  "total_images": 120,
+  "split_directories": [
+    "test",
+    "train",
+    "vaildate"
+  ],
+  "images_per_split": {
+    "test": 20,
+    "train": 80,
+    "val": 20
+  },
+  "images_per_bank_and_split": {
+    "axis": {
+      "test": 5,
+      "train": 20,
+      "val": 5
+    },
+    "canara": {
+      "test": 5,
+      "train": 20,
+      "val": 5
+    },
+    "icici": {
+      "test": 5,
+      "train": 20,
+      "val": 5
+    },
+    "syndicate": {
+      "test": 5,
+      "train": 20,
+      "val": 5
+    }
+  },
+  "file_extensions": {
+    "png": 59,
+    "jpeg": 61
+  },
+  "actual_formats": {
+    "png": 59,
+    "jpeg": 61
+  },
+  "extension_content_mismatches": [],
+  "dimensions": {
+    "1024x476": 38,
+    "1514x704": 31,
+    "1024x469": 30,
+    "1508x688": 9,
+    "1024x467": 9,
+    "1024x472": 2,
+    "1505x688": 1
+  },
+  "corrupted_images": [],
+  "exact_duplicate_groups": [],
+  "same_template_pairs": [
+    [
+      "test/icici/#2",
+      "train/icici/#19"
+    ],
+    [
+      "test/icici/#5",
+      "train/icici/#15"
+    ],
+    [
+      "test/syndicate/#3",
+      "test/syndicate/#5"
+    ],
+    [
+      "test/syndicate/#4",
+      "train/syndicate/#18"
+    ],
+    [
+      "test/syndicate/#4",
+      "vaildate/syndicate/#2"
+    ],
+    [
+      "test/syndicate/#4",
+      "vaildate/syndicate/#4"
+    ],
+    [
+      "test/syndicate/#5",
+      "vaildate/syndicate/#3"
+    ],
+    [
+      "train/canara/#11",
+      "train/canara/#12"
+    ],
+    [
+      "train/canara/#11",
+      "train/canara/#16"
+    ],
+    [
+      "train/icici/#2",
+      "train/icici/#4"
+    ],
+    [
+      "train/icici/#19",
+      "vaildate/icici/#1"
+    ],
+    [
+      "train/syndicate/#3",
+      "train/syndicate/#7"
+    ],
+    [
+      "train/syndicate/#14",
+      "train/syndicate/#17"
+    ],
+    [
+      "train/syndicate/#14",
+      "vaildate/syndicate/#3"
+    ],
+    [
+      "train/syndicate/#18",
+      "vaildate/syndicate/#2"
+    ],
+    [
+      "vaildate/syndicate/#2",
+      "vaildate/syndicate/#4"
+    ]
+  ],
+  "same_template_note": "Pairs whose 8x8 difference-hash is within 2 bits. Inspection shows these are the same blank cheque template filled with different typed content - not duplicated samples - but it means test cheques share layouts with training cheques, so layout-based extraction results are optimistic for unseen templates.",
+  "cross_split_leakage": {
+    "same_filename": [],
+    "same_content": []
+  },
+  "annotation_files": [],
+  "other_files": [],
+  "filename_is_cheque_number": 119,
+  "labels": {
+    "transcription_labels_present": false,
+    "label_format": null,
+    "derivable_weak_labels": [
+      "bank (from folder name)",
+      "split (from folder name)",
+      "cheque_number (6-digit filename stem, confirmed visually on samples to equal the first MICR group)"
+    ]
+  },
+  "handwriting_assessment": "No transcription/annotation files exist. Visual inspection of samples from every bank shows the payee, amount-in-words, amount-in-figures, date and account fields are rendered in machine fonts (typed onto cheque templates); the only handwritten content is the signature. The dataset therefore cannot be used to train or evaluate a handwritten-text recognizer.",
+  "paddleocr_finetune_compatible": false,
+  "paddleocr_finetune_reason": "PaddleOCR recognition fine-tuning needs line crops with text transcriptions (rec_gt_*.txt) and detection needs polygon labels; neither exists."
+}

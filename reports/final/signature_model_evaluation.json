@@ -1,0 +1,305 @@
+{
+  "model_version": "fusion-lr-20261031161455-ef4c7123",
+  "config": {
+    "positives_per_signer": 3,
+    "impostors_per_signer": 3,
+    "seed": 1337,
+    "target_far": 0.05,
+    "target_frr": 0.05,
+    "l2": 0.01,
+    "epochs": 3000,
+    "lr": 0.1
+  },
+  "thresholds": {
+    "match": 0.8431,
+    "mismatch": 0.5394,
+    "eer_threshold": 0.6282,
+    "val_eer": 0.25
+  },
+  "weights": {
+    "orb": 0.2217,
+    "sift": 1.3993,
+    "ssim": 0.0,
+    "hog": 0.1844,
+    "profile": 0.1716,
+    "chamfer": 0.0,
+    "density": 0.0,
+    "aspect": 0.0725
+  },
+  "per_feature_val_auc": {
+    "orb": 0.7781,
+    "orb__vs_altered": 0.5385,
+    "orb__vs_impostor": 0.9378,
+    "sift": 0.8536,
+    "sift__vs_altered": 0.634,
+    "sift__vs_impostor": 1.0,
+    "ssim": 0.5963,
+    "ssim__vs_altered": 0.5246,
+    "ssim__vs_impostor": 0.6442,
+    "hog": 0.6747,
+    "hog__vs_altered": 0.4537,
+    "hog__vs_impostor": 0.8219,
+    "profile": 0.5882,
+    "profile__vs_altered": 0.4408,
+    "profile__vs_impostor": 0.6864,
+    "chamfer": 0.6367,
+    "chamfer__vs_altered": 0.4433,
+    "chamfer__vs_impostor": 0.7656,
+    "density": 0.5368,
+    "density__vs_altered": 0.4842,
+    "density__vs_impostor": 0.5719,
+    "aspect": 0.6229,
+    "aspect__vs_altered": 0.4948,
+    "aspect__vs_impostor": 0.7083
+  },
+  "train": {
+    "pairs": {
+      "positive": 240,
+      "altered": 160,
+      "impostor": 240
+    },
+    "roc_auc": 0.8624,
+    "eer": 0.2409,
+    "eer_threshold": 0.5723,
+    "at_match_threshold": {
+      "threshold": 0.8431,
+      "tp": 59,
+      "fn": 181,
+      "fp": 17,
+      "tn": 383,
+      "far": 0.0425,
+      "frr": 0.7542,
+      "precision": 0.7763,
+      "recall": 0.2458,
+      "f1": 0.3734
+    },
+    "at_eer_threshold": {
+      "threshold": 0.5723,
+      "tp": 182,
+      "fn": 58,
+      "fp": 96,
+      "tn": 304,
+      "far": 0.24,
+      "frr": 0.2417,
+      "precision": 0.6547,
+      "recall": 0.7583,
+      "f1": 0.7027
+    },
+    "by_negative_type": {
+      "positive_vs_altered": {
+        "auc": 0.6604,
+        "far_at_match_threshold": 0.1062
+      },
+      "positive_vs_impostor": {
+        "auc": 0.9971,
+        "far_at_match_threshold": 0.0
+      }
+    },
+    "three_way_decisions": {
+      "positive": {
+        "MISMATCH": 47,
+        "REVIEW": 134,
+        "MATCH": 59
+      },
+      "altered": {
+        "MISMATCH": 58,
+        "MATCH": 17,
+        "REVIEW": 85
+      },
+      "impostor": {
+        "MISMATCH": 240
+      }
+    }
+  },
+  "val": {
+    "pairs": {
+      "positive": 60,
+      "altered": 40,
+      "impostor": 60
+    },
+    "roc_auc": 0.8418,
+    "eer": 0.25,
+    "eer_threshold": 0.6282,
+    "at_match_threshold": {
+      "threshold": 0.8431,
+      "tp": 13,
+      "fn": 47,
+      "fp": 5,
+      "tn": 95,
+      "far": 0.05,
+      "frr": 0.7833,
+      "precision": 0.7222,
+      "recall": 0.2167,
+      "f1": 0.3333
+    },
+    "at_eer_threshold": {
+      "threshold": 0.6282,
+      "tp": 45,
+      "fn": 15,
+      "fp": 25,
+      "tn": 75,
+      "far": 0.25,
+      "frr": 0.25,
+      "precision": 0.6429,
+      "recall": 0.75,
+      "f1": 0.6923
+    },
+    "by_negative_type": {
+      "positive_vs_altered": {
+        "auc": 0.6046,
+        "far_at_match_threshold": 0.125
+      },
+      "positive_vs_impostor": {
+        "auc": 1.0,
+        "far_at_match_threshold": 0.0
+      }
+    },
+    "three_way_decisions": {
+      "positive": {
+        "REVIEW": 44,
+        "MATCH": 13,
+        "MISMATCH": 3
+      },
+      "altered": {
+        "MISMATCH": 12,
+        "REVIEW": 23,
+        "MATCH": 5
+      },
+      "impostor": {
+        "MISMATCH": 60
+      }
+    }
+  },
+  "test": {
+    "pairs": {
+      "positive": 60,
+      "altered": 40,
+      "impostor": 60
+    },
+    "roc_auc": 0.8635,
+    "eer": 0.2317,
+    "eer_threshold": 0.5679,
+    "at_match_threshold": {
+      "threshold": 0.8431,
+      "tp": 13,
+      "fn": 47,
+      "fp": 1,
+      "tn": 99,
+      "far": 0.01,
+      "frr": 0.7833,
+      "precision": 0.9286,
+      "recall": 0.2167,
+      "f1": 0.3514
+    },
+    "at_eer_threshold": {
+      "threshold": 0.5679,
+      "tp": 46,
+      "fn": 14,
+      "fp": 23,
+      "tn": 77,
+      "far": 0.23,
+      "frr": 0.2333,
+      "precision": 0.6667,
+      "recall": 0.7667,
+      "f1": 0.7132
+    },
+    "by_negative_type": {
+      "positive_vs_altered": {
+        "auc": 0.6625,
+        "far_at_match_threshold": 0.025
+      },
+      "positive_vs_impostor": {
+        "auc": 0.9975,
+        "far_at_match_threshold": 0.0
+      }
+    },
+    "three_way_decisions": {
+      "positive": {
+        "REVIEW": 34,
+        "MISMATCH": 13,
+        "MATCH": 13
+      },
+      "altered": {
+        "MISMATCH": 12,
+        "REVIEW": 27,
+        "MATCH": 1
+      },
+      "impostor": {
+        "MISMATCH": 60
+      }
+    }
+  },
+  "signers_per_split": {
+    "train": 80,
+    "val": 20,
+    "test": 20
+  },
+  "decisions_with_alteration_check": {
+    "val": {
+      "genuine_recaptured": {
+        "REVIEW": 48,
+        "MATCH": 4,
+        "MISMATCH": 8
+      },
+      "forgery_as_is": {
+        "MISMATCH": 18,
+        "REVIEW": 18,
+        "MATCH": 4
+      },
+      "forgery_recaptured": {
+        "MISMATCH": 23,
+        "REVIEW": 14,
+        "MATCH": 3
+      },
+      "other_signer_recaptured": {
+        "MISMATCH": 60
+      },
+      "summary": {
+        "false_accept_rate_MATCH_on_negatives": 0.05,
+        "forgery_as_is_accepted": "4/40",
+        "forgery_as_is_rejected": "18/40",
+        "genuine_recaptured_MATCH": "4/60",
+        "genuine_recaptured_MISMATCH": "8/60"
+      }
+    },
+    "test": {
+      "genuine_recaptured": {
+        "REVIEW": 45,
+        "MISMATCH": 11,
+        "MATCH": 4
+      },
+      "forgery_as_is": {
+        "REVIEW": 17,
+        "MISMATCH": 21,
+        "MATCH": 2
+      },
+      "forgery_recaptured": {
+        "MISMATCH": 30,
+        "REVIEW": 10
+      },
+      "other_signer_recaptured": {
+        "MISMATCH": 60
+      },
+      "summary": {
+        "false_accept_rate_MATCH_on_negatives": 0.0143,
+        "forgery_as_is_accepted": "2/40",
+        "forgery_as_is_rejected": "21/40",
+        "genuine_recaptured_MATCH": "4/60",
+        "genuine_recaptured_MISMATCH": "11/60"
+      }
+    }
+  },
+  "leakage_check": {
+    "train_val_overlap": 0,
+    "train_test_overlap": 0,
+    "val_test_overlap": 0
+  },
+  "limitations": [
+    "Only one genuine specimen per signer: positive pairs are simulated re-captures of the same image, so the model has never seen natural within-signer variation.",
+    "Altered signatures are synthetic stroke additions/erasures of the reference image, not skilled forgeries.",
+    "Scores are similarity scores, not calibrated probabilities.",
+    "Small test set (20 signers): metrics carry wide uncertainty.",
+    "About 10% of the synthetic forgeries (25/240) differ from their genuine image only by JPEG noise \u2013 the random edit landed on blank paper \u2013 so no method can distinguish them; they count against detection.",
+    "Genuine positives are re-captures of the same image, so they are near-identical copies and the copy check routes them to REVIEW. Real genuine signatures (a new signing) would not be pixel copies; this behaviour could not be evaluated on this dataset."
+  ]
+}

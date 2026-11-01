@@ -1,0 +1,3 @@
+Place the signature dataset here (the folder containing genuine_signatures.csv,
+forged_signatures.csv, signature_dataset/ and forged_signatures/),
+or set CV_SIGNATURE_DATASET in backend/.env. Files are only read.

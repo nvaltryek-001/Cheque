@@ -1,0 +1,49 @@
+# Render Blueprint, FREE plan - https://render.com/docs/blueprint-spec
+# One click: https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2
+# Or: Dashboard → New → Blueprint → pick this repository → set CV_ADMIN_PASSWORD → Apply.
+#
+# What the Free plan means (these are Render's limits, not the application's):
+#   * No persistent disk. The database, uploaded cheques, enrolled signatures and user accounts are erased whenever the
+#     instance restarts, is redeployed, or goes to sleep (after 15 minutes without a visit; waking takes about a minute).
+#   * 0.1 CPU and 512 MB of memory. A cheque needs about 3 seconds of CPU, so reading one takes roughly half a minute here
+#     (an estimate from the measured CPU time, not yet measured on Render) instead of about 3 seconds on a full CPU.
+#   * 750 free instance hours per month for the whole Render workspace.
+# For data that survives, use render.paid.yaml (Starter plan + 1 GB disk): docs/DEPLOYMENT.md.
+services:
+  - type: web
+    name: chequeverify-ai
+    runtime: docker
+    plan: free
+    autoDeployTrigger: "off"   # a push never restarts the service (which would erase its temporary data); redeploy with Manual Deploy
+    healthCheckPath: /api/health
+    envVars:
+      - key: CV_SECRET_KEY
+        generateValue: true
+      - key: CV_ADMIN_PASSWORD
+        sync: false          # you type it in the dashboard; never commit it
+      - key: PORT                # Render's default (10000), written out so the container, its health check and Render agree
+        value: "10000"
+      - key: CV_INSTANCE_DIR
+        value: /data/instance
+      - key: CV_MAX_UPLOAD_MB
+        value: "10"
+      # 512 MB of memory and 0.1 CPU (measured limits of the Free plan: scripts/deploy_simulation.py, docs/DEPLOYMENT.md).
+      # 12 megapixels covers a full 600-dpi cheque (10.7 MP). One image is processed at a time: with a tenth of a CPU, two at
+      # once would each take twice as long and use twice the memory for no gain. Others wait up to CV_IMAGE_QUEUE_SECONDS.
+      - key: CV_MAX_IMAGE_PIXELS
+        value: "12000000"
+      - key: CV_MAX_CONCURRENT_IMAGES
+        value: "1"
+      - key: CV_IMAGE_QUEUE_SECONDS
+        value: "120"
+      - key: CV_PROXY_HOPS       # Render terminates TLS in one proxy: trust one X-Forwarded-For hop
+        value: "1"
+      - key: CV_MIN_PASSWORD_LENGTH   # also applies to the first admin password you type in the dashboard
+        value: "12"
+      # Sign-in by institutional email (docs/AUTHENTICATION.md). It stays off, and only the administrator sign-in is
+      # offered, until a mail server is configured. Add these in the dashboard (Environment) once you have chosen a
+      # mail service - a Blueprint only prompts for sync:false values when it is first created and ignores keys added
+      # later, and never put their values in this file:
+      #   CV_SMTP_HOST, CV_SMTP_USER, CV_SMTP_FROM, CV_SMTP_PASSWORD (secret), optional CV_ADMIN_EMAILS
+      - key: CV_EMAIL_DELIVERY
+        value: smtp

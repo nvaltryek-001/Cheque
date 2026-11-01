@@ -1,0 +1,105 @@
+{
+  "images": 20,
+  "engine": "tesseract",
+  "micr_model": true,
+  "fill_rate_pct": {
+    "bank_name": 100.0,
+    "branch_name": 100.0,
+    "ifsc_code": 100.0,
+    "cheque_number": 100.0,
+    "micr_code": 100.0,
+    "account_number": 100.0,
+    "date": 100.0,
+    "payee_name": 100.0,
+    "amount_figures": 100.0,
+    "amount_words": 100.0
+  },
+  "cheque_number": {
+    "labelled": 20,
+    "exact_match": 20,
+    "accuracy_pct": 100.0,
+    "mean_cer": 0.0
+  },
+  "account_number_in_signature_registry": {
+    "checked": 0,
+    "found": 0,
+    "pct": null
+  },
+  "amount_words_vs_figures": {
+    "both_parsed": 20,
+    "consistent": 20,
+    "pct_of_images": 100.0,
+    "pct_of_parsed": 100.0
+  },
+  "date_valid_pct": 100.0,
+  "confirmed_label_accuracy": {},
+  "per_bank": {
+    "axis": {
+      "n": 5,
+      "filled_bank_name": 5,
+      "filled_branch_name": 5,
+      "filled_ifsc_code": 5,
+      "filled_cheque_number": 5,
+      "filled_micr_code": 5,
+      "filled_account_number": 5,
+      "filled_date": 5,
+      "filled_payee_name": 5,
+      "filled_amount_figures": 5,
+      "filled_amount_words": 5,
+      "cheque_number_ok": 5,
+      "cheque_number_n": 5,
+      "amount_consistent": 5
+    },
+    "canara": {
+      "n": 5,
+      "filled_bank_name": 5,
+      "filled_branch_name": 5,
+      "filled_ifsc_code": 5,
+      "filled_cheque_number": 5,
+      "filled_micr_code": 5,
+      "filled_account_number": 5,
+      "filled_date": 5,
+      "filled_payee_name": 5,
+      "filled_amount_figures": 5,
+      "filled_amount_words": 5,
+      "cheque_number_ok": 5,
+      "cheque_number_n": 5,
+      "amount_consistent": 5
+    },
+    "icici": {
+      "n": 5,
+      "filled_bank_name": 5,
+      "filled_branch_name": 5,
+      "filled_ifsc_code": 5,
+      "filled_cheque_number": 5,
+      "filled_micr_code": 5,
+      "filled_account_number": 5,
+      "filled_date": 5,
+      "filled_payee_name": 5,
+      "filled_amount_figures": 5,
+      "filled_amount_words": 5,
+      "cheque_number_ok": 5,
+      "cheque_number_n": 5,
+      "amount_consistent": 5
+    },
+    "syndicate": {
+      "n": 5,
+      "filled_bank_name": 5,
+      "filled_branch_name": 5,
+      "filled_ifsc_code": 5,
+      "filled_cheque_number": 5,
+      "filled_micr_code": 5,
+      "filled_account_number": 5,
+      "filled_date": 5,
+      "filled_payee_name": 5,
+      "filled_amount_figures": 5,
+      "filled_amount_words": 5,
+      "cheque_number_ok": 5,
+      "cheque_number_n": 5,
+      "amount_consistent": 5
+    }
+  },
+  "mean_seconds_per_image": 3.61,
+  "split": "test",
+  "predictions_note": "20 per-image predictions omitted from the repository (they contain account numbers and names from the private dataset). Re-run `python manage.py eval-ocr` locally to regenerate them."
+}

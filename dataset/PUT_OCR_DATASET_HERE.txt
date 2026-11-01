@@ -1,0 +1,2 @@
+Place the OCR dataset here (train/, vaildate/, test/ with one folder per bank),
+or set CV_OCR_DATASET in backend/.env to its current location. Files are only read.

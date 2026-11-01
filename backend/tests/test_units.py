@@ -1,0 +1,199 @@
+"""Unit tests: preprocessing, comparison edge cases, amounts, MICR, validation."""
+import math
+
+import cv2
+import numpy as np
+import pytest
+
+from conftest import synthetic_signature
+from app.ocr import amounts
+from app.ocr.fields import _parse_figures_tokens, _validate, _field, FIELD_ORDER
+from app.signature import compare
+from app.signature.compare import _ratio_matches, decide, features
+from app.signature.preprocess import CANVAS_H, CANVAS_W, SignatureError, preprocess
+
+
+# --------------------------------------------------------------- preprocess
+def test_preprocess_output_shape_and_quality():
+    p = preprocess(synthetic_signature())
+    assert p.gray.shape == (CANVAS_H, CANVAS_W) and p.mask.shape == (CANVAS_H, CANVAS_W)
+    assert p.mask.any() and p.quality["acceptable"]
+    assert p.gray[0, 0] == 255  # background normalised to white
+
+
+def test_preprocess_preserves_aspect_ratio():
+    wide = preprocess(synthetic_signature(w=600, h=80))
+    ys, xs = np.nonzero(wide.mask)
+    assert (xs.max() - xs.min()) > 3 * (ys.max() - ys.min())
+
+
+def test_preprocess_empty_image():
+    with pytest.raises(SignatureError):
+        preprocess(np.full((80, 240, 3), 250, np.uint8))
+
+
+def test_preprocess_tiny_and_invalid():
+    with pytest.raises(SignatureError):
+        preprocess(np.zeros((5, 5, 3), np.uint8))
+    with pytest.raises(SignatureError):
+        preprocess(np.zeros((0, 0), np.uint8))
+
+
+def test_preprocess_grayscale_and_rgba_inputs():
+    img = synthetic_signature()
+    preprocess(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+    rgba = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+    preprocess(rgba)
+
+
+def test_preprocess_uneven_background():
+    img = synthetic_signature().astype(np.float32)
+    grad = np.linspace(0.45, 1.0, img.shape[1])[None, :, None]
+    p = preprocess((img * grad).astype(np.uint8))
+    assert p.mask.mean() / 255 < 0.3
+
+
+# ------------------------------------------------------------- comparison
+def test_ratio_matches_handles_empty_and_short_lists():
+    assert _ratio_matches(None, None, cv2.NORM_HAMMING) == 0
+    d = np.random.default_rng(0).integers(0, 255, (5, 32), dtype=np.uint8)
+    assert _ratio_matches(d, np.zeros((0, 32), np.uint8), cv2.NORM_HAMMING) == 0
+    assert _ratio_matches(d, d[:1], cv2.NORM_HAMMING) >= 1  # k=1 path
+
+
+def test_features_in_range_and_identity_high():
+    a = preprocess(synthetic_signature(1))
+    f, dbg = features(a, a)
+    for k, v in f.items():
+        assert math.isnan(v) or 0 <= v <= 1, k
+    assert f["ssim"] > 0.99 and f["chamfer"] > 0.99
+
+
+def test_missing_keypoints_do_not_crash():
+    from app.signature.preprocess import Processed
+    blank = Processed(np.full((CANVAS_H, CANVAS_W), 255, np.uint8), np.zeros((CANVAS_H, CANVAS_W), np.uint8),
+                      (0, 0, 10, 10), {"acceptable": True})
+    b = preprocess(synthetic_signature(2))
+    f, dbg = features(blank, b)
+    assert f["orb"] == 0.0 and "too few" in dbg["orb"].get("note", "")
+    assert f["chamfer"] == 0.0 and f["density"] == 0.0
+
+
+def test_decide_without_references_is_review():
+    q = preprocess(synthetic_signature())
+    res = decide(q, [], None)
+    assert res["decision"] == "REVIEW" and res["score"] is None
+
+
+def test_decide_identical_vs_different_with_baseline():
+    a = preprocess(synthetic_signature(1))
+    b = preprocess(synthetic_signature(50))
+    same = decide(a, [a], None)
+    diff = decide(b, [a], None)
+    assert same["score"] > diff["score"]
+    assert same["decision"] in ("MATCH", "REVIEW")
+
+
+def test_decide_uses_best_of_multiple_specimens():
+    a = preprocess(synthetic_signature(1))
+    b = preprocess(synthetic_signature(60))
+    res = decide(a, [b, a], None)
+    assert res["best_index"] == 1 and len(res["per_specimen"]) == 2
+
+
+def test_fusion_model_monotone_and_thresholds(tmp_path):
+    m = compare.FusionModel({k: 1.0 for k in compare.FEATURES}, 0.0, {k: 0.5 for k in compare.FEATURES},
+                            {k: 0.2 for k in compare.FEATURES}, {"match": 0.8, "mismatch": 0.3}, {"version": "t"})
+    lo = m.score({k: 0.2 for k in compare.FEATURES})
+    hi = m.score({k: 0.9 for k in compare.FEATURES})
+    assert hi > lo
+    nan = m.score({**{k: 0.9 for k in compare.FEATURES}, "sift": float("nan")})
+    assert 0 <= nan <= 1
+    m.save(tmp_path / "f.json")
+    assert compare.FusionModel.load(tmp_path / "f.json").thresholds["match"] == 0.8
+    assert compare.FusionModel.load(tmp_path / "missing.json") is None
+
+
+# ---------------------------------------------------------------- amounts
+@pytest.mark.parametrize("words,value", [
+    ("Eighteen Lakh Seventy Five Thousand", 1875000),
+    ("Two Crore Sixty Lakhs", 26000000),
+    ("Sixty-Three Thousand Two Hundred Forty Only", 63240),
+    ("Seventeen Lakhs Only", 1700000),
+    ("Thirty Six Thousand And Fifteen", 36015),
+    ("Twenty-Nine Lakh Fourteen Thousan", 2914000),  # OCR typo tolerated
+])
+def test_words_to_number(words, value):
+    assert amounts.words_to_number(words) == value
+
+
+def test_number_words_roundtrip():
+    for n in (1, 19, 105, 42020, 2350000, 14000000, 123456789):
+        assert amounts.words_to_number(amounts.number_to_words(n)) == n
+
+
+def test_indian_format_and_figures():
+    assert amounts.format_indian(1875000) == "18,75,000"
+    assert amounts.parse_figures("₹ 2,60,00,000/-") == 26000000
+    assert amounts.parse_figures("") is None
+
+
+def test_rupee_symbol_misread_is_corrected_by_words():
+    assert _parse_figures_tokens("24,15,000/-", 415000)[0] == 415000
+    assert _parse_figures_tokens("471,000/-", 471000)[0] == 471000
+    assert _parse_figures_tokens("2,60,00,000/-", None)[0] == 26000000
+
+
+def test_validation_checks():
+    fields = {k: _field() for k in FIELD_ORDER}
+    fields["ifsc_code"] = _field("UTIB0000426", 0.9)
+    fields["bank_name"] = _field("Axis Bank", 0.9)
+    fields["amount_figures"] = _field("18,75,000/-", 0.9)
+    fields["amount_words"] = _field("Eighteen Lakh Seventy Five Thousand", 0.9)
+    v = _validate(fields)
+    checks = {c["check"]: c["status"] for c in v["checks"]}
+    assert checks["ifsc_format"] == "pass" and checks["ifsc_bank_match"] == "pass"
+    assert checks["amount_consistency"] == "pass" and checks["completeness"] == "warn"
+    fields["amount_words"] = _field("Two Lakh", 0.9)
+    assert {c["check"]: c["status"] for c in _validate(fields)["checks"]}["amount_consistency"] == "fail"
+
+
+# ------------------------------------------------------------ alteration check
+def _with_extra_stroke(img):
+    out = img.copy()
+    cv2.line(out, (60, 20), (200, 80), (40, 40, 40), 2)
+    return out
+
+
+def test_alteration_check_flags_added_stroke():
+    from app.signature.alteration import check
+    a = synthetic_signature(1)
+    res = check(preprocess(_with_extra_stroke(a)), preprocess(a))
+    assert res.aligned and res.near_copy and res.altered and res.added_frac > 0.01
+
+
+def test_alteration_check_ignores_unrelated_and_identical():
+    from app.signature.alteration import check
+    a = synthetic_signature(1)
+    same = check(preprocess(a), preprocess(a))
+    assert same.near_copy and not same.altered
+    other = check(preprocess(synthetic_signature(9)), preprocess(a))
+    assert not other.altered
+
+
+def test_decide_rejects_edited_copy_and_reviews_exact_copy():
+    a = synthetic_signature(1)
+    ref = preprocess(a)
+    edited = decide(preprocess(_with_extra_stroke(a)), [ref], None)
+    assert edited["decision"] == "MISMATCH" and "alteration" in edited["reasons"][0]
+    exact = decide(preprocess(a), [ref], None)
+    assert exact["decision"] == "REVIEW" and "copy" in exact["reasons"][0]
+    assert "alteration" in exact["per_specimen"][0]
+
+
+def test_alteration_check_skipped_without_full_images():
+    from app.signature.alteration import check
+    from app.signature.preprocess import Processed
+    p = preprocess(synthetic_signature(1))
+    bare = Processed(p.gray, p.mask, p.bbox, p.quality)
+    assert check(bare, p) is None
