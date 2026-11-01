@@ -94,6 +94,11 @@ jobs:
         with:
           name: frontend-package-lock
           path: Frontend/package-lock.json
+      # TEMPORARY (removed in the next commit): print the lock file, compressed, so it can be copied from this log.
+      - name: Show the lock file (gzip + base64)
+        working-directory: Frontend
+        continue-on-error: true
+        run: gzip -9 -c package-lock.json | base64 -w 0 | fold -w 160 | sed 's/^/LOCK> /'
 
   # Everything this branch adds to main is searched for secrets, datasets, cheque images, databases and
   # environment files. Private terms (real account numbers, names) can only be searched locally: see docs/SECURITY.md.
