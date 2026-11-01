@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline rehearsal of a container deployment (Docker image + Render blueprint) on this machine.
 
-    sudo python3 scripts/deploy_simulation.py                      # profile "render": Dockerfile ENV + render.yaml values
+    sudo python3 scripts/deploy_simulation.py                      # profile "render": Dockerfile ENV + render.paid.yaml values (the Free plan has no disk to rehearse)
     sudo python3 scripts/deploy_simulation.py --profile docker      # Dockerfile ENV only (the key lives in the data folder)
     sudo python3 scripts/deploy_simulation.py --report out.json --keep
 
@@ -136,8 +136,8 @@ class Sim:
         self.password = secrets.token_urlsafe(18)
         self.secret_key = secrets.token_hex(32)                      # what Render's generateValue would provide
         self.docker_env = dockerfile_env(ROOT / "Dockerfile")
-        self.blueprint = blueprint_env(ROOT / "render.yaml")
-        self.mount = disk_mount(ROOT / "render.yaml")
+        self.blueprint = blueprint_env(ROOT / "render.paid.yaml")
+        self.mount = disk_mount(ROOT / "render.paid.yaml")
         self.containers: list[Container] = []
         self.install_image()
 

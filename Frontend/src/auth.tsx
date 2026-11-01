@@ -4,7 +4,7 @@ import { api, AuthConfig, CodeRequested, getToken, post, Role, setToken, setUnau
 // Used when the server cannot be asked (older backend, network error): the password form always works.
 const FALLBACK_CONFIG: AuthConfig = {
   email_signin: false, email_domain: null, email_domains: [], password_signin: true,
-  code_length: 8, code_ttl_seconds: 600, resend_seconds: 30,
+  code_length: 8, code_ttl_seconds: 600, resend_seconds: 30, storage_temporary: false,
 };
 
 interface AuthState {

@@ -39,7 +39,7 @@ const NAV: { group: string; items: { to: string; label: string; icon: string }[]
 ];
 
 export default function App() {
-  const { user, ready, logout } = useAuth();
+  const { user, ready, logout, config } = useAuth();
   const route = useRoute();
   const [menuOpen, setMenuOpen] = useState(false);
   if (!ready) return <div className="boot"><span className="spinner spinner-lg" /></div>;
@@ -108,6 +108,11 @@ export default function App() {
         <button className="menu-btn icon-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
           <Icon name="menu" />
         </button>
+        {config.storage_temporary && (
+          <div className="banner banner-warn" role="note">
+            Temporary storage: this server has no persistent disk. Accounts, cheques and signatures are erased when it restarts, is redeployed or goes to sleep after a quiet period. Download any report you need to keep.
+          </div>
+        )}
         {page}
       </main>
     </div>

@@ -128,6 +128,34 @@ def report(actions: list[tuple[str, str]]) -> None:
     print(f"seed: {summary}", flush=True)
 
 
+TEMPORARY_WARNING = ("{data} is not a mounted disk or volume, so this is temporary storage: the database, uploaded cheques, enrolled "
+                     "signatures and user accounts are erased when the container restarts or is replaced (a Render Free instance has no "
+                     "disk). Mount a disk or volume on {data} to keep them.")
+
+
+def is_mount_point(path: Path) -> bool:
+    """True when something (a Render disk, a Docker volume or bind mount) is mounted exactly on `path`."""
+    target = os.path.realpath(path)
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8") as f:
+            for line in f:
+                fields = line.split()
+                if len(fields) > 4 and fields[4].replace("\\040", " ") == target:
+                    return True
+        return False
+    except OSError:
+        return os.path.ismount(target)
+
+
+def storage_is_temporary(data: Path = DATA) -> bool:
+    """True when the data folder is an ordinary folder of the container, so everything in it is lost when the container
+    is replaced. CV_STORAGE_TEMPORARY=0 or 1 overrides the detection."""
+    explicit = os.environ.get("CV_STORAGE_TEMPORARY", "").strip().lower()
+    if explicit:
+        return explicit in ("1", "true", "yes", "on")
+    return not is_mount_point(data)
+
+
 def drop_privileges() -> None:
     """Root only: hand the volume to the app user, then become that user."""
     pw = pwd.getpwnam(USER)
@@ -152,6 +180,10 @@ def main() -> None:
         drop_privileges()
     instance.mkdir(parents=True, exist_ok=True)
     report(seed_all(models, reports))
+    temporary = storage_is_temporary()
+    os.environ["CV_STORAGE_TEMPORARY"] = "1" if temporary else "0"      # the application tells the people who sign in
+    if temporary:
+        print("storage: " + TEMPORARY_WARNING.format(data=DATA), flush=True)
     port = os.environ.get("PORT", "8000")
     os.chdir(APP)
     os.execv(sys.executable, [sys.executable, "run.py", "--prod", "--host", "0.0.0.0", "--port", port])

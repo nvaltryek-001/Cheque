@@ -110,7 +110,7 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 | 12 | Real genuine/skilled-forgery signature data | BLOCKED | needs data collection; requirements in `docs/SIGNATURE_EVALUATION_PROTOCOL.md` §4 |
 | 13 | Dataset tests in CI | BLOCKED | datasets are private; needs private runner or synthetic fixtures |
 | 15 | Dataset validation (OCR test set + signature dataset) | COMPLETED | `reports/final/DATASET_VALIDATION_REPORT.md`; awaiting owner review before push |
-| 14 | Render deployment | IN PROGRESS (owner's step) | Code pushed 2026-11-01 at the owner's request. The service must be created by the owner: Render → New → Blueprint → branch `chequeverify-v2` (paid Starter plan + disk; `CV_ADMIN_PASSWORD` entered in the dashboard). No URL exists until then |
+| 14 | Render deployment | IN PROGRESS (owner's step) | Code pushed 2026-11-01 at the owner's request. The service must be created by the owner: Render → New → Blueprint → branch `chequeverify-v2` (Free plan as the owner chose on 2026-11-01: no disk, data erased on sleep or restart, `render.yaml`; the Starter + disk variant is `render.paid.yaml`; `CV_ADMIN_PASSWORD` entered in the dashboard). No URL exists until then |
 | 16 | Upload memory-exhaustion guard | COMPLETED | Phase 2: pixel limit from the file header before decoding on every upload route; bomb PNG 968 MB → ≈111 MB peak |
 | 17 | Per-user rate limits on heavy endpoints | COMPLETED | Phase 2: `services/throttle.py` (`CV_RATE_LIMIT_PER_MIN`), in memory per process |
 | 18 | Password policy | COMPLETED | Phase 2: length (12 on Render), mix, common/username, ≠ current, first admin checked at start-up |
@@ -177,7 +177,7 @@ Older databases are upgraded in place by an additive, idempotent migration at st
 ## 10. Deployment status
 Code is on GitHub (branch `chequeverify-v2`; the newest commit is shown by `git log`). **No Render service has been created by this project's
 tooling**, so there is no URL yet; the owner creates it: Render -> New -> Blueprint -> repository `nvaltryek-001/Cheque` -> branch
-`chequeverify-v2` -> enter `CV_ADMIN_PASSWORD` (12+ characters, letters and digits/symbols) -> Apply (paid Starter plan + 1 GB disk).
+`chequeverify-v2` -> enter `CV_ADMIN_PASSWORD` (12+ characters, letters and digits/symbols) -> Apply (Free plan; data is temporary - `render.paid.yaml` is the Starter plan + 1 GB disk).
 Sign in at the service URL with *Administrator sign-in*, user `admin`. The hosted copy starts empty (datasets are private). Container
 checks run on GitHub on every push; results and what is still unverified: `reports/final/DEPLOYMENT_VERIFICATION.md`.
 

@@ -101,7 +101,7 @@ ChequeVerify/
 ├── dataset/                     ← put the OCR dataset here (train/ vaildate/ test/ <bank>/)
 ├── signature/                   ← put the signature dataset here (genuine_signatures.csv …)
 ├── legacy/                      the previous implementation (v1), kept unchanged
-├── Dockerfile, render.yaml      container + Render deployment
+├── Dockerfile, render.yaml      container + Render deployment (Free plan; render.paid.yaml = Starter + disk)
 ├── .github/workflows/ci.yml     tests, frontend build, Docker smoke test
 ├── start.ps1 / start.sh         one-command setup, run, dev mode and tests
 └── README.md
@@ -197,7 +197,7 @@ docker build -t chequeverify .
 docker run -p 8000:8000 -e CV_ADMIN_PASSWORD='Choose-a-strong-one-123' -v chequeverify-data:/data chequeverify
 ```
 Or connect this repository to Render as a Blueprint (`render.yaml`). Full guide: `docs/DEPLOYMENT.md`.
-Shortcut that opens Render's Blueprint page with this repository and the `chequeverify-v2` branch filled in (a paid Starter plan with a 1 GB disk; Render asks for `CV_ADMIN_PASSWORD`):
+Shortcut that opens Render's Blueprint page with this repository and the `chequeverify-v2` branch filled in (Free plan, no payment needed; Render asks for `CV_ADMIN_PASSWORD`; **on the Free plan all data is erased when the instance sleeps or restarts**, and `render.paid.yaml` is the Starter plan with a 1 GB disk for data that must survive):
 <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2>
 GitHub Actions (`.github/workflows/ci.yml`) runs the backend tests, the Vite build, a dependency audit, the private-data audit
 and, in a real container, the live smoke test, persistence across restart, redeploy and hard kill, a clean `docker stop`, the

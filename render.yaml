@@ -1,10 +1,20 @@
-# Render Blueprint – https://render.com/docs/blueprint-spec
-# Dashboard → New → Blueprint → pick this repository → set CV_ADMIN_PASSWORD → Apply.
+# Render Blueprint, FREE plan - https://render.com/docs/blueprint-spec
+# One click: https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2
+# Or: Dashboard → New → Blueprint → pick this repository → set CV_ADMIN_PASSWORD → Apply.
+#
+# What the Free plan means (these are Render's limits, not the application's):
+#   * No persistent disk. The database, uploaded cheques, enrolled signatures and user accounts are erased whenever the
+#     instance restarts, is redeployed, or goes to sleep (after 15 minutes without a visit; waking takes about a minute).
+#   * 0.1 CPU and 512 MB of memory. A cheque needs about 3 seconds of CPU, so reading one takes roughly half a minute here
+#     (an estimate from the measured CPU time, not yet measured on Render) instead of about 3 seconds on a full CPU.
+#   * 750 free instance hours per month for the whole Render workspace.
+# For data that survives, use render.paid.yaml (Starter plan + 1 GB disk): docs/DEPLOYMENT.md.
 services:
   - type: web
     name: chequeverify-ai
     runtime: docker
-    plan: starter            # a persistent disk needs a paid plan; on "free" all data is lost on restart
+    plan: free
+    autoDeployTrigger: "off"   # a push never restarts the service (which would erase its temporary data); redeploy with Manual Deploy
     healthCheckPath: /api/health
     envVars:
       - key: CV_SECRET_KEY
@@ -17,14 +27,15 @@ services:
         value: /data/instance
       - key: CV_MAX_UPLOAD_MB
         value: "10"
-      # The Starter plan has 512 MB of memory. Measured in a rehearsal (scripts/deploy_simulation.py): a 25-megapixel scan
-      # costs about 250 MB while it is processed and four at once peaked above 1 GB, which ends in a kill and a restart.
-      # 12 megapixels covers a full 600-dpi cheque (10.7 MP); at most 2 images are processed at the same moment and
-      # further requests wait. Raise both only together with a larger plan.
+      # 512 MB of memory and 0.1 CPU (measured limits of the Free plan: scripts/deploy_simulation.py, docs/DEPLOYMENT.md).
+      # 12 megapixels covers a full 600-dpi cheque (10.7 MP). One image is processed at a time: with a tenth of a CPU, two at
+      # once would each take twice as long and use twice the memory for no gain. Others wait up to CV_IMAGE_QUEUE_SECONDS.
       - key: CV_MAX_IMAGE_PIXELS
         value: "12000000"
       - key: CV_MAX_CONCURRENT_IMAGES
-        value: "2"
+        value: "1"
+      - key: CV_IMAGE_QUEUE_SECONDS
+        value: "120"
       - key: CV_PROXY_HOPS       # Render terminates TLS in one proxy: trust one X-Forwarded-For hop
         value: "1"
       - key: CV_MIN_PASSWORD_LENGTH   # also applies to the first admin password you type in the dashboard
@@ -36,7 +47,3 @@ services:
       #   CV_SMTP_HOST, CV_SMTP_USER, CV_SMTP_FROM, CV_SMTP_PASSWORD (secret), optional CV_ADMIN_EMAILS
       - key: CV_EMAIL_DELIVERY
         value: smtp
-    disk:
-      name: chequeverify-data
-      mountPath: /data
-      sizeGB: 1

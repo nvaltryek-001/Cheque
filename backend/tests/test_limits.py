@@ -42,10 +42,11 @@ def test_every_route_that_processes_images_takes_a_slot():
 def test_defaults_and_the_render_blueprint_keep_the_worst_case_inside_512_mb():
     from app.config import Config
     assert Config.MAX_CONCURRENT_IMAGES == 2 and Config.IMAGE_QUEUE_SECONDS == 30
-    blueprint = (Path(__file__).resolve().parents[2] / "render.yaml").read_text()
-    pixels = int(__import__("re").search(r"CV_MAX_IMAGE_PIXELS\s*\n\s*value:\s*\"?(\d+)", blueprint).group(1))
-    slots = int(__import__("re").search(r"CV_MAX_CONCURRENT_IMAGES\s*\n\s*value:\s*\"?(\d+)", blueprint).group(1))
-    assert pixels <= 12_500_000 and slots <= 2                                          # 600 dpi cheque = 10.7 MP; measured in the rehearsal
+    for name in ("render.yaml", "render.paid.yaml"):                                     # Free and paid plan both have 512 MB
+        blueprint = (Path(__file__).resolve().parents[2] / name).read_text()
+        pixels = int(__import__("re").search(r"CV_MAX_IMAGE_PIXELS\s*\n\s*value:\s*\"?(\d+)", blueprint).group(1))
+        slots = int(__import__("re").search(r"CV_MAX_CONCURRENT_IMAGES\s*\n\s*value:\s*\"?(\d+)", blueprint).group(1))
+        assert pixels <= 12_500_000 and slots <= 2, name                                # 600 dpi cheque = 10.7 MP; measured in the rehearsal
 
 
 def test_at_most_the_configured_number_of_images_run_at_once(app):

@@ -109,7 +109,12 @@ def batch():
         raise ApiError(400, "file_required", "Attach one or more images in field 'files'.")
     if len(files) > current_app.config["MAX_BATCH_FILES"]:
         raise ApiError(400, "too_many_files", f"At most {current_app.config['MAX_BATCH_FILES']} files per batch.")
-    batch_id = uuid.uuid4().hex[:12]
+    # The Batch page sends one cheque per request (so a slow server never holds one request for minutes) and names the batch
+    # itself so that the requests still belong together. The id has the shape of the ones the server makes.
+    requested = request.form.get("batch_id") or ""
+    if requested and not re.fullmatch(r"[0-9a-f]{12}", requested):
+        raise ApiError(400, "validation_error", "Invalid batch id.")
+    batch_id = requested or uuid.uuid4().hex[:12]
     results = []
     for f in files:
         try:

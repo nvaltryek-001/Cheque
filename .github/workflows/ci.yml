@@ -231,6 +231,25 @@ jobs:
           for i in $(seq 1 45); do curl -fs http://127.0.0.1:8003/api/health >/dev/null && break; sleep 2; done
           # The probe runs inside the container, where the server listens on 8000 (8003 is only the host side).
           docker exec cvr python tests/smoke_live.py http://127.0.0.1:8000 Ci-pass-12345
+      - name: No disk at all (the Render Free plan) - starts on Render's port with the Free settings, works, and a replacement container starts empty
+        if: ${{ !cancelled() }}
+        run: |
+          # render.yaml (Free): no volume, PORT 10000, one image at a time, a long queue. The data folder is then an ordinary
+          # folder of the container, so everything in it is gone with the container - the application must say so, not hide it.
+          FREE="-e PORT=10000 -e CV_MAX_CONCURRENT_IMAGES=1 -e CV_IMAGE_QUEUE_SECONDS=120 -e CV_PROXY_HOPS=1 -e CV_MIN_PASSWORD_LENGTH=12 -e CV_ADMIN_PASSWORD=Ci-pass-12345"
+          docker run -d --name cvf -p 8004:10000 $FREE chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8004/api/health >/dev/null && break; sleep 2; done
+          curl -fs http://127.0.0.1:8004/api/health
+          docker exec cvf python tests/smoke_live.py http://127.0.0.1:10000 Ci-pass-12345
+          docker top cvf -eo pid,uid,args | awk '/run\.py --prod/ {print $2}' | sort -u | grep -qx 10001
+          docker logs cvf 2>&1 | grep -q "temporary storage" || { echo "the start-up log does not warn that the data folder is temporary"; exit 1; }
+          docker rm -f cvf
+          docker run -d --name cvf2 -p 8004:10000 $FREE chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8004/api/health >/dev/null && break; sleep 2; done
+          TOKEN=$(curl -fs -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"Ci-pass-12345"}' http://127.0.0.1:8004/api/auth/login | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["token"])')
+          TOTAL=$(curl -fs -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8004/api/cheques?per_page=1' | python3 -c 'import sys,json; print(json.load(sys.stdin)["meta"]["total"])')
+          echo "cheques held by the replacement container: $TOTAL"
+          test "$TOTAL" = "0"
       - name: Explain failures (written as annotations, so the reasons can be read without opening the job log)
         if: failure()
         run: |
@@ -239,7 +258,8 @@ jobs:
           emit "cvr (read-only) logs" "$(docker logs cvr 2>&1 | tail -n 40)"
           emit "cvp (proxy) logs" "$(docker logs cvp 2>&1 | tail -n 25)"
           emit "cvp HSTS probe" "$(curl -si -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8001/api/health 2>&1 | head -n 14)"
+          emit "cvf (Free plan, no disk) logs" "$(docker logs cvf 2>&1 | tail -n 40; docker logs cvf2 2>&1 | tail -n 20)"
           emit "cvr smoke probe" "$(docker exec cvr python tests/smoke_live.py http://127.0.0.1:8000 Ci-pass-12345 2>&1 | tail -n 25)"
       - name: Container logs
         if: always()
-        run: for c in cv cvp cvm cvr; do echo "=== $c"; docker logs $c 2>&1 | tail -n 80 || true; done
+        run: for c in cv cvp cvm cvr cvf cvf2; do echo "=== $c"; docker logs $c 2>&1 | tail -n 80 || true; done

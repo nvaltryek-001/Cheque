@@ -33,6 +33,9 @@ class Config:
     STORAGE_DIR = _path("CV_STORAGE_DIR", INSTANCE_DIR / "storage")
     MODELS_DIR = _path("CV_MODELS_DIR", BACKEND_DIR / "models_store")
     REPORTS_DIR = _path("CV_REPORTS_DIR", PROJECT_ROOT / "reports")
+    # Set by docker_entrypoint.py when /data is not a mounted disk or volume (Render Free plan): everything stored is lost
+    # when the container restarts, and the sign-in screen and the application say so. CV_STORAGE_TEMPORARY=0/1 overrides.
+    STORAGE_TEMPORARY = os.environ.get("CV_STORAGE_TEMPORARY", "").strip().lower() in ("1", "true", "yes", "on")
 
     # --- original datasets (read-only, never modified) ----------------------
     OCR_DATASET_DIR = _path("CV_OCR_DATASET", PROJECT_ROOT / "dataset")

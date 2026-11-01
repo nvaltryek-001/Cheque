@@ -110,6 +110,13 @@ def test_config_is_public_and_describes_the_methods(client, mail):
     assert d["code_length"] == 8 and d["code_ttl_seconds"] == 600
 
 
+def test_config_says_when_the_storage_is_temporary(client, app):
+    """The sign-in screen warns about it (Render Free plan: no disk, everything is erased on restart)."""
+    assert client.get("/api/auth/config").get_json()["data"]["storage_temporary"] is False
+    app.config["STORAGE_TEMPORARY"] = True
+    assert client.get("/api/auth/config").get_json()["data"]["storage_temporary"] is True
+
+
 def test_email_sign_in_is_off_until_a_delivery_method_is_configured(client, app):
     assert client.get("/api/auth/config").get_json()["data"]["email_signin"] is False
     for path, body in (("/api/auth/email/request", {"email": ALICE}), ("/api/auth/email/verify", {"email": ALICE, "code": "12345678"})):

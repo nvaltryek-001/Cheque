@@ -86,7 +86,8 @@ def public_config() -> dict:
     domains = list(cfg["EMAIL_DOMAINS"])
     return {"email_signin": enabled(), "email_domain": domains[0] if domains else None, "email_domains": domains,
             "password_signin": bool(cfg["PASSWORD_LOGIN"]), "code_length": CODE_DIGITS,
-            "code_ttl_seconds": int(cfg["EMAIL_CODE_TTL_SECONDS"]), "resend_seconds": int(cfg["EMAIL_RESEND_SECONDS"])}
+            "code_ttl_seconds": int(cfg["EMAIL_CODE_TTL_SECONDS"]), "resend_seconds": int(cfg["EMAIL_RESEND_SECONDS"]),
+            "storage_temporary": bool(cfg.get("STORAGE_TEMPORARY", False))}
 
 
 def _digest(email: str, code: str) -> str:

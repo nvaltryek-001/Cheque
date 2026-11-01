@@ -18,6 +18,20 @@ To use the datasets inside the container (dataset pages, import, training), moun
 Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a private network.
 
 ## 2. Render (managed hosting, connected to this GitHub repo)
+`render.yaml` is the **Free-plan** blueprint (the one-click link uses it). `render.paid.yaml` is the Starter-plan
+blueprint with a 1 GB persistent disk, for data that must survive.
+
+**What the Free plan means** (Render's limits, <https://render.com/docs/free>; the application cannot change them):
+- **No persistent disk.** Users, cheques, enrolled signatures and the database are erased whenever the instance
+  restarts, is redeployed or goes to sleep. The administrator account is created again from `CV_ADMIN_PASSWORD` at
+  every start; everything else has to be uploaded again.
+- **Sleeps after 15 minutes without a visit.** The next visit waits about a minute while the instance wakes up.
+- **0.1 CPU and 512 MB.** The Starter plan has 0.5 CPU and the same memory. Reading one cheque is CPU-bound and needs
+  about 3 seconds of CPU (measured), so on Free it takes roughly half a minute (an estimate; one tenth of a CPU) instead
+  of about 3 seconds on a full CPU. The blueprint processes one image at a time and lets later uploads wait.
+- 750 free instance hours per month for the whole workspace; builds use the workspace's monthly pipeline minutes.
+
+**Steps**
 1. Make sure the branch you want to run is on GitHub (see *Pushing* below). Nothing needs to be merged into `main`.
 2. render.com → New → **Blueprint** → connect `nvaltryek-001/cheque` → in the Blueprint settings choose the branch
    (for example `chequeverify-v2`). Render reads `render.yaml` from that branch.
@@ -25,14 +39,16 @@ Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a priva
    <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2>
 3. Enter a value for `CV_ADMIN_PASSWORD` when asked (12 or more characters; it is not stored in git) → **Apply**.
    Render builds the Dockerfile (the first build takes several minutes) and gives you an
-   `https://chequeverify-ai-xxxx.onrender.com` URL. Every push to the linked branch redeploys; add `[skip render]`
-   to the commit message of a documentation-only change to avoid a rebuild.
+   `https://chequeverify-ai-xxxx.onrender.com` URL. The blueprint turns auto-deploy off, so a push never restarts the
+   service (which would erase its temporary data); to run newer code use **Manual Deploy → Deploy latest commit**.
 4. Open the URL → *Administrator sign-in* → user `admin` and the password from step 3. Sign-in by emailed code needs
    the `CV_SMTP_*` values (below); until they are set only the administrator sign-in works.
 5. The hosted copy starts empty. The private datasets are not in git or in the image. To use your own cheques, sign in
    and use the batch upload on the Cheques page; signature specimens are added on the Signers page.
-- `render.yaml` uses the *starter* plan because a persistent disk is required to keep data; on the free
-  plan the service works but loses all records on every restart/redeploy.
+
+**To keep data (paid):** in the Render dashboard choose the Starter plan and add a 1 GB disk mounted at `/data`, or create
+the Blueprint from `render.paid.yaml` (Render lets you change the Blueprint file name during setup; or copy that file over
+`render.yaml`). Details that apply to a service with a disk:
 - What Render's documentation says about a service with a disk (checked against docs.render.com, not exercised here
   because nothing has been deployed): only files under the mount path (`/data`) survive a deploy or restart; the disk is
   not available while the image is built or during a pre-deploy command, so nothing may depend on it then; a service
@@ -42,9 +58,9 @@ Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a priva
 - `PORT` is `10000` on Render; the blueprint states it, the entrypoint listens on `$PORT` and the health check follows it.
 - Environment values marked `sync: false` in a blueprint (`CV_ADMIN_PASSWORD`) are asked for only when the Blueprint is
   first created. Add anything new afterwards (the `CV_SMTP_*` values) in the dashboard under Environment.
-- **Memory.** The starter plan has 512 MB. A 25-megapixel scan costs about 250 MB while it is processed and four at once
+- **Memory.** The Free and Starter plans both have 512 MB. A 25-megapixel scan costs about 250 MB while it is processed and four at once
   peaked above 1 GB in the rehearsal, which would end in an out-of-memory kill and a restart for every user. The blueprint
-  therefore sets `CV_MAX_IMAGE_PIXELS=12000000` (a full 600 dpi cheque is 10.7 MP) and `CV_MAX_CONCURRENT_IMAGES=2`
+  therefore sets `CV_MAX_IMAGE_PIXELS=12000000` (a full 600 dpi cheque is 10.7 MP) and `CV_MAX_CONCURRENT_IMAGES` (2 on Starter, 1 on Free)
   (others wait up to `CV_IMAGE_QUEUE_SECONDS`, then get `503 busy` with `Retry-After`), and the image sets glibc malloc
   options, and the Dockerfile itself now defaults to the same two limits. With these, eight simultaneous maximum-size
   uploads peaked between 250 and 395 MB in repeated rehearsals (see
@@ -62,6 +78,7 @@ the Windows firewall port to reach it from other PCs on the LAN.
 |---|---|---|
 | `CV_ADMIN_PASSWORD` | random, printed once | set it (first start only); it must satisfy the password policy or the server refuses to start |
 | `CV_MIN_PASSWORD_LENGTH` | 8 | 12 (set in `render.yaml`) |
+| `CV_STORAGE_TEMPORARY` | detected | set by the container entrypoint when `/data` is not a mounted disk or volume (the Render Free plan); the log, the sign-in screen and a banner then say that data is erased on restart. `0` or `1` overrides the detection |
 | `CV_EMAIL_DELIVERY` | empty (email sign-in off) | `smtp` once the `CV_SMTP_*` values below are set. **Never `log` on a hosted copy** |
 | `CV_SMTP_HOST`, `CV_SMTP_PORT`, `CV_SMTP_SECURITY`, `CV_SMTP_USER`, `CV_SMTP_FROM` | -, 587, `starttls`, -, - | your mail service's values; add them in the Render dashboard → Environment (not in `render.yaml`) |
 | `CV_SMTP_PASSWORD` | - | a secret: type it in the dashboard only, never in a file, a commit or a chat |

@@ -157,6 +157,29 @@ def test_nothing_shipped_is_not_an_error(tree):
     assert not (tree.data / ep.MANIFEST_NAME).exists()
 
 
+@pytest.mark.skipif(not Path("/proc/self/mountinfo").exists(), reason="needs Linux")
+def test_a_data_folder_that_is_not_a_mount_is_temporary_storage(tmp_path, monkeypatch):
+    monkeypatch.delenv("CV_STORAGE_TEMPORARY", raising=False)
+    assert ep.is_mount_point(Path("/proc")) is True               # a real mount point is recognised
+    assert ep.is_mount_point(tmp_path) is False                   # an ordinary folder is not
+    assert ep.storage_is_temporary(tmp_path) is True              # the Render Free plan: /data is just a folder of the container
+    assert ep.storage_is_temporary(Path("/proc")) is False        # a disk or volume mounted there: data survives
+
+
+def test_the_environment_overrides_the_detection_of_temporary_storage(tmp_path, monkeypatch):
+    for value, expected in (("1", True), ("true", True), ("YES", True), ("0", False), ("no", False)):
+        monkeypatch.setenv("CV_STORAGE_TEMPORARY", value)
+        assert ep.storage_is_temporary(tmp_path) is expected, value
+
+
+def test_main_tells_the_log_and_the_application_that_storage_is_temporary():
+    src = Path(ep.__file__).read_text()
+    main = src[src.index("def main()"):]
+    assert "storage_is_temporary()" in main and 'os.environ["CV_STORAGE_TEMPORARY"]' in main
+    assert main.index("seed_all(") < main.index("storage_is_temporary()") < main.index("os.execv")
+    assert "temporary storage" in ep.TEMPORARY_WARNING            # the Docker job in CI greps the log for exactly this
+
+
 def test_main_hands_the_volume_over_before_it_writes_anything():
     """Root must do only the chown; folders and copies are made as the app user (a link planted in the volume by a
     compromised server process must not let root write elsewhere). Checked on the source order."""

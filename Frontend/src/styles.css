@@ -600,3 +600,7 @@ summary { cursor: pointer; color: var(--brand); font-size: 13px; font-weight: 50
   .ca-det, .ca-sign path { animation: none; opacity: 1; stroke-dashoffset: 0; }
   .side { transition: none; }
 }
+
+/* Batch page: progress of a long batch (one cheque per request) */
+.batch-progress { margin-top: 16px; display: grid; gap: 8px; max-width: 640px; }
+.batch-progress progress { width: 100%; height: 8px; accent-color: var(--brand); }

@@ -183,6 +183,12 @@ export default function Login() {
       <section className="auth-main">
         <div className="auth-mobile-brand"><Brand tone="light" /></div>
         <div className="auth-card">
+          {config.storage_temporary && (
+            <div className="notice notice-warn" role="note">
+              <Icon name="info" size={16} />
+              <span>Temporary storage: this server has no persistent disk, so accounts, cheques and signatures are erased whenever it restarts or goes to sleep. After a quiet period the first visit can take about a minute.</span>
+            </div>
+          )}
           {shown === "email" && (
             <form onSubmit={submitEmail} noValidate className="auth-form">
               <span className="chip-icon"><Icon name="mail" size={22} /></span>
@@ -273,7 +279,7 @@ export default function Login() {
                   </label>
                   {error && <div className="form-error" role="alert">{error}</div>}
                   <Button kind="primary" type="submit" busy={busy} wide>Sign in</Button>
-                  <p className="tiny muted">First run: the admin password is printed in the backend terminal.</p>
+                  <p className="tiny muted">The administrator password is the one set when this server was installed (CV_ADMIN_PASSWORD; if none was set, it was printed in the server log at the first start).</p>
                 </>
               ) : (
                 <div className="notice" role="note">

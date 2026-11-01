@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { post } from "../api";
+import { useRef, useState } from "react";
+import { ApiError, post } from "../api";
 import { useAuth } from "../auth";
 import { Button, Empty, errText, FileDrop, PageHead, Panel, Pill, useToast } from "../components/ui";
 
@@ -9,8 +9,16 @@ interface BatchResult {
   failed: number;
   results: { file: string; ok: boolean; error?: string; id?: number; status?: string; bank_name?: string; cheque_number?: string; payee_name?: string; amount_figures?: string; review_count?: number }[];
 }
+type Row = BatchResult["results"][number];
 
 const MAX = 20;
+
+/** 12 hex characters, the shape of the ids the server makes. The cheques are sent one per request under one id. */
+function newBatchId(): string {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 export default function Batch() {
   const { can } = useAuth();
@@ -18,19 +26,43 @@ export default function Batch() {
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<BatchResult | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
+  const stop = useRef(false);
 
+  // One cheque per request: a small server needs up to a minute for each, and a single request for twenty would run for
+  // twenty minutes. Sent one by one, every result shows as soon as it is ready and a long batch can be stopped.
   const run = async () => {
-    const fd = new FormData();
-    files.forEach((f) => fd.append("files", f));
+    const queue = files;
+    const id = newBatchId();
+    const rows: Row[] = [];
+    stop.current = false;
     setBusy(true);
+    setResult(null);
     try {
-      const r = await post<BatchResult>("/api/cheques/batch", fd);
-      setResult(r);
-      setFiles([]);
-      toast(r.failed ? "info" : "success", `${r.processed} processed, ${r.failed} failed`);
-    } catch (e) {
-      toast("error", errText(e));
+      for (let i = 0; i < queue.length && !stop.current; i++) {
+        setProgress({ done: i, total: queue.length, current: queue[i].name });
+        const fd = new FormData();
+        fd.append("files", queue[i]);
+        fd.append("batch_id", id);
+        let signedOut = false;
+        try {
+          const r = await post<BatchResult>("/api/cheques/batch", fd);
+          rows.push(...r.results);
+        } catch (e) {
+          rows.push({ file: queue[i].name, ok: false, error: errText(e) });
+          signedOut = e instanceof ApiError && e.status === 401;
+        }
+        const failed = rows.filter((r) => !r.ok).length;
+        setResult({ batch_id: id, processed: rows.length - failed, failed, results: [...rows] });
+        if (signedOut) break; // the rest would fail the same way
+      }
+      const failed = rows.filter((r) => !r.ok).length;
+      const left = queue.length - rows.length;
+      toast(failed || left ? "info" : "success", `${rows.length - failed} processed, ${failed} failed${left ? `, ${left} not started` : ""}`);
     } finally {
+      const done = new Set(queue.slice(0, rows.length));
+      setFiles((current) => current.filter((f) => !done.has(f)));
+      setProgress(null);
       setBusy(false);
     }
   };
@@ -39,7 +71,7 @@ export default function Batch() {
 
   return (
     <>
-      <PageHead title="Batch processing" sub={`Process up to ${MAX} cheques at once. Each one runs the full OCR, validation and signature-detection pipeline.`} />
+      <PageHead title="Batch processing" sub={`Process up to ${MAX} cheques in one go. Each one runs the full OCR, validation and signature-detection pipeline, one after the other.`} />
       <Panel>
         <FileDrop multiple label="Drop cheque images here, or click to choose several" onFiles={(f) => setFiles([...files, ...f].slice(0, MAX))} />
         {files.length > 0 && (
@@ -49,16 +81,25 @@ export default function Batch() {
                 <li key={`${f.name}-${i}`}>
                   <span>{f.name}</span>
                   <span className="tiny muted">{(f.size / 1024).toFixed(0)} KB</span>
-                  <button className="icon-btn" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</button>
+                  <button className="icon-btn" aria-label={`Remove ${f.name}`} disabled={busy} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</button>
                 </li>
               ))}
             </ul>
             <div className="row-actions">
-              <Button onClick={() => setFiles([])}>Clear</Button>
+              <Button disabled={busy} onClick={() => setFiles([])}>Clear</Button>
               <Button kind="primary" icon="play" busy={busy} onClick={run}>Process {files.length} cheque{files.length === 1 ? "" : "s"}</Button>
             </div>
-            {busy && <p className="tiny muted">Processing runs on the server; about 1–3 seconds per cheque.</p>}
           </>
+        )}
+        {busy && progress && (
+          <div className="batch-progress" role="status" aria-live="polite">
+            <progress max={progress.total} value={progress.done} aria-label="Batch progress" />
+            <p className="tiny muted">
+              Cheque {progress.done + 1} of {progress.total}: {progress.current}. Reading a cheque takes a few seconds on a normal
+              server and up to a minute on a small free one. Results appear below as they finish.
+            </p>
+            <Button small onClick={() => { stop.current = true; }}>Stop after this cheque</Button>
+          </div>
         )}
       </Panel>
       {result && (

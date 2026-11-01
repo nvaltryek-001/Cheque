@@ -135,6 +135,8 @@ export interface AuthConfig {
   code_length: number;
   code_ttl_seconds: number;
   resend_seconds: number;
+  /** True on a server without a persistent disk (Render Free plan): everything stored is erased when it restarts. */
+  storage_temporary?: boolean;
 }
 export interface CodeRequested {
   sent: boolean;
