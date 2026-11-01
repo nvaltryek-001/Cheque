@@ -2,7 +2,7 @@
 Flask>=3.0,<4            # [3.1.3]
 numpy>=1.26              # [2.5.3]
 opencv-python-headless>=4.8,<5   # SIFT + HOG are in the 4.x main package (HOG moved out in 5.x)
-reportlab>=4.0           # [5.0.1] PDF reports
+reportlab>=5.1.0           # [5.0.1] PDF reports
 Pillow>=10               # image header check before decoding (also a reportlab dependency)
 waitress>=3.0            # production WSGI server (python run.py --prod)
 
