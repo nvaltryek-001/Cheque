@@ -8,6 +8,7 @@ import cv2
 from flask import Blueprint, current_app, g, request, send_file
 
 from ..db import execute, now_iso, query, row_to_dict
+from ..services.limits import image_slot
 from ..services import audit, storage
 from ..services.auth import login_required
 from ..services.throttle import rate_limited
@@ -244,6 +245,7 @@ def _session_out(row) -> dict:
 @bp.post("/api/signers/<int:sid>/specimens")
 @login_required("admin")
 @rate_limited()
+@image_slot
 def upload_specimen(sid: int):
     signer = _signer(sid)
     if signer["status"] != "active":
@@ -271,6 +273,7 @@ def _form_session_id() -> int | None:
 @bp.post("/api/signers/<int:sid>/specimens/batch")
 @login_required("admin")
 @rate_limited(cost=lambda: max(1, len(request.files.getlist("files"))))
+@image_slot
 def upload_specimens_batch(sid: int):
     """Enroll several signatures of one signing session in one request (field 'files').
 
@@ -311,6 +314,7 @@ def upload_specimens_batch(sid: int):
 @bp.put("/api/specimens/<int:spid>")
 @login_required("admin")
 @rate_limited()
+@image_slot
 def replace_specimen(spid: int):
     old = _specimen(spid)
     data, img, name = storage.read_upload(request.files.get("file"))
@@ -401,6 +405,7 @@ def specimen_image(spid: int):
 # ------------------------------------------------------------ dataset import
 @bp.post("/api/signers/import-dataset")
 @login_required("admin")
+@image_slot
 def import_dataset():
     """Enroll the genuine specimens listed in genuine_signatures.csv.
 

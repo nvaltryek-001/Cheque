@@ -17,6 +17,7 @@ Review status is the application's own (`ok`, `review`, `missing`); nothing is r
 from __future__ import annotations
 
 import csv
+import io
 import math
 import re
 from collections import defaultdict
@@ -160,9 +161,11 @@ def masked_table(rows: list[dict]) -> str:
 
 def full_table_csv(rows: list[dict], path: str | Path) -> None:
     """PRIVATE table with the real and predicted values – never commit it."""
-    with open(path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
-        w.writerow(["cheque_id", "file", "field", "ground_truth", "predicted", "correct", "confidence", "review_status", "issues"])
-        for r in rows:
-            w.writerow([r["cheque_id"], r["file"], r["field"], r["truth"], r["predicted"],
-                        "correct" if r["correct"] else "incorrect", r["confidence"], r["status"], "; ".join(r["issues"])])
+    from ..services import atomic
+    buf = io.StringIO(newline="")
+    w = csv.writer(buf)
+    w.writerow(["cheque_id", "file", "field", "ground_truth", "predicted", "correct", "confidence", "review_status", "issues"])
+    for r in rows:
+        w.writerow([r["cheque_id"], r["file"], r["field"], r["truth"], r["predicted"],
+                    "correct" if r["correct"] else "incorrect", r["confidence"], r["status"], "; ".join(r["issues"])])
+    atomic.write_bytes(path, buf.getvalue().encode("utf-8"))

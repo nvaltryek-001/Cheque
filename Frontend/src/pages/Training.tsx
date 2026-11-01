@@ -154,8 +154,8 @@ export default function Training() {
         <Panel title="Deployed models">
           <div className="kv-grid">
             <div><span>OCR engine</span><b>{status.data.ocr_engine.available ? `${status.data.ocr_engine.name} ${status.data.ocr_engine.version}` : "unavailable"}</b></div>
-            <div><span>MICR templates</span><b>{status.data.micr_model.available ? `${status.data.micr_model.glyphs} glyphs from ${status.data.micr_model.trained_cheques} cheques` : "not trained"}</b></div>
-            <div><span>Signature model</span><b>{status.data.signature_model.version}</b></div>
+            <div><span>MICR templates</span><b>{status.data.micr_model.available ? `${status.data.micr_model.glyphs} glyphs from ${status.data.micr_model.trained_cheques} cheques` : status.data.micr_model.error ? "file damaged: retrain or restore a backup" : "not trained"}</b></div>
+            <div><span>Signature model</span><b>{status.data.signature_model.error ? `${status.data.signature_model.version} (model file damaged)` : status.data.signature_model.version}</b></div>
             <div><span>Trained</span><b>{fmtDate(status.data.signature_model.trained_at)}</b></div>
           </div>
         </Panel>

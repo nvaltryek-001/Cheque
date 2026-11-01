@@ -2,6 +2,7 @@
 (or a backend/.env file, loaded by run.py). Paths are resolved relative to the project root."""
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -46,6 +47,9 @@ class Config:
     MAX_BATCH_FILES = _int("CV_MAX_BATCH_FILES", 20)
     # decoded size limit, checked from the file header before decoding (memory-exhaustion guard)
     MAX_IMAGE_PIXELS = _int("CV_MAX_IMAGE_PIXELS", 25_000_000)
+    # images processed at the same moment (memory ceiling = this x memory per image; see app/services/limits.py)
+    MAX_CONCURRENT_IMAGES = _int("CV_MAX_CONCURRENT_IMAGES", 2)
+    IMAGE_QUEUE_SECONDS = _int("CV_IMAGE_QUEUE_SECONDS", 30)         # how long a request waits for a slot before "503 busy"
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"}
     LOGIN_MAX_ATTEMPTS = _int("CV_LOGIN_MAX_ATTEMPTS", 5)
     LOGIN_LOCK_SECONDS = _int("CV_LOGIN_LOCK_SECONDS", 300)       # sliding window for failed sign-ins
@@ -102,13 +106,15 @@ class Config:
         """Use CV_SECRET_KEY if given, otherwise a persistent random key in instance/."""
         if cls.SECRET_KEY:
             return cls.SECRET_KEY
+        from .services import atomic
         key_file = Path(cls.INSTANCE_DIR) / "secret_key"
         if key_file.exists():
-            return key_file.read_text().strip()
+            existing = key_file.read_text().strip()
+            if len(existing) >= 32:
+                return existing
+            # Empty or cut short (a crash while the file was first written): a short key would make session tokens
+            # easy to forge, so it is replaced. Sessions signed with the old value stop working; nothing else is lost.
+            logging.getLogger("chequeverify").warning("secret_key in %s was empty or too short and was replaced", cls.INSTANCE_DIR)
         key = secrets.token_hex(32)
-        key_file.write_text(key)
-        try:
-            os.chmod(key_file, 0o600)
-        except OSError:
-            pass
+        atomic.write_text(key_file, key)
         return key

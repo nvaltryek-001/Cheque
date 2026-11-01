@@ -162,8 +162,8 @@ class FusionModel:
                 "thresholds": self.thresholds, "meta": self.meta}
 
     def save(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.to_dict(), indent=2))
+        from ..services import atomic          # a crash while saving must not leave a truncated model behind
+        atomic.write_json(path, self.to_dict())
 
     @classmethod
     def load(cls, path: Path) -> "FusionModel | None":

@@ -361,5 +361,6 @@ def audit_signature_dataset(root: Path) -> dict:
 def save_report(report: dict, out_dir: Path, name: str) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     p = out_dir / f"{name}.json"
-    p.write_text(json.dumps(report, indent=2, default=str))
+    from . import atomic
+    atomic.write_json(p, report, default=str)
     return p

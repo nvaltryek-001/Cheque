@@ -19,6 +19,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from ..api.common import ApiError
+from . import atomic
 
 DEFAULT_MAX_IMAGE_PIXELS = 25_000_000   # a 600-dpi cheque is ~10 MP; override with CV_MAX_IMAGE_PIXELS
 AREAS = ("cheques", "crops", "specimens", "specimens_processed", "queries", "reports")
@@ -136,7 +137,7 @@ def sha256(data: bytes) -> str:
 
 def save_bytes(area: str, data: bytes, ext: str = "png") -> str:
     name = f"{uuid.uuid4().hex}.{ext}"
-    (area_dir(area) / name).write_bytes(data)
+    atomic.write_bytes(area_dir(area) / name, data)     # whole file or no file: a crash must not leave a truncated image
     return name
 
 

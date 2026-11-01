@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..db import connect, now_iso
-from . import models as model_store
+from . import atomic, models as model_store
 from .datasets import discover_ocr_images, load_signature_manifests
 
 log = logging.getLogger("chequeverify.jobs")
@@ -58,6 +58,23 @@ def start(app, kind: str, config: dict, user_id: int | None) -> int:
     return run_id
 
 
+def mark_interrupted(db_path: str) -> int:
+    """Close the books on jobs that a stopped server never finished.
+
+    Call it once when a server process starts, before it accepts requests: no job of this process is running yet, so a
+    row that still says "running" belongs to an earlier process that was stopped (redeploy, crash, out-of-memory kill)
+    before the job ended. Left alone it would show as running forever. Returns how many rows were closed."""
+    conn = connect(str(db_path))
+    try:
+        cur = conn.execute("UPDATE model_runs SET status='failed', finished_at=?, "
+                           "message='interrupted: the server stopped before this job finished; start it again' "
+                           "WHERE status='running'", (now_iso(),))
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def _reports_dir(app) -> Path:
     d = Path(app.config["REPORTS_DIR"]) / "final"
     d.mkdir(parents=True, exist_ok=True)
@@ -71,7 +88,7 @@ def run_signature(app, config: dict, progress) -> tuple[dict, str]:
         raise RuntimeError("Signature dataset not found.")
     model, report = train_and_evaluate(m, {k: v for k, v in config.items() if k != "synchronous"}, progress)
     model.save(Path(app.config["MODELS_DIR"]) / model_store.FUSION_FILE)
-    (_reports_dir(app) / "signature_model_evaluation.json").write_text(json.dumps(report, indent=2))
+    atomic.write_json(_reports_dir(app) / "signature_model_evaluation.json", report)
     return report, model.version
 
 
@@ -105,7 +122,7 @@ def run_micr(app, config: dict, progress) -> tuple[dict, str]:
     model.save(Path(app.config["MODELS_DIR"]) / model_store.MICR_FILE)
     report = {"model_version": version, "training": meta, "evaluation": results,
               "label_source": "6-digit filename stem = first MICR group (cheque number)"}
-    (_reports_dir(app) / "micr_model_evaluation.json").write_text(json.dumps(report, indent=2))
+    atomic.write_json(_reports_dir(app) / "micr_model_evaluation.json", report)
     return report, version
 
 
@@ -123,7 +140,7 @@ def run_ocr_eval(app, config: dict, progress) -> tuple[dict, str]:
     progress(f"running OCR on {len(items)} {split} images")
     res = evaluate(items, model_store.ocr_engine(), model_store.micr_model(), registry)
     res["split"] = split
-    (_reports_dir(app) / f"ocr_evaluation_{split}.json").write_text(json.dumps(res, indent=2))
+    atomic.write_json(_reports_dir(app) / f"ocr_evaluation_{split}.json", res)
     return res, f"ocr-{res['engine']}"
 
 

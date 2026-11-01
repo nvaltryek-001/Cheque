@@ -9,7 +9,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, g, request, send_file
 
 from ..db import get_setting, query, row_to_dict, set_setting
-from ..services import audit, jobs, models
+from ..services import atomic, audit, jobs, models
 from ..services.auth import login_required
 from ..services.cheques import final_values
 from ..services.datasets import (audit_ocr_dataset, audit_signature_dataset, discover_ocr_images,
@@ -163,14 +163,20 @@ def _audit_file(name: str) -> Path:
 
 def _cached_audit(name: str, fn, root) -> dict:
     p = _audit_file(name)
-    if request.args.get("refresh") == "1" or not p.is_file():
+    cached = None
+    if request.args.get("refresh") != "1" and p.is_file():
+        try:
+            cached = json.loads(p.read_text())
+        except (OSError, ValueError):
+            cached = None                      # damaged cache file: build it again below
+    if cached is None:
         if request.args.get("refresh") == "1" and g.user["role"] != "admin":
             raise ApiError(403, "forbidden", "Only admins can re-run dataset audits.")
         report = fn(Path(root))
-        p.write_text(json.dumps(report, indent=2, default=str))
+        atomic.write_json(p, report, default=str)
         audit.record("dataset.audit", "dataset", name)
         return report
-    return json.loads(p.read_text())
+    return cached
 
 
 @bp.get("/api/datasets/ocr/audit")

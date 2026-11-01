@@ -14,6 +14,10 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     CV_INSTANCE_DIR=/data/instance CV_MODELS_DIR=/data/models CV_REPORTS_DIR=/data/reports \
     CV_OCR_ENGINE=tesseract CV_PROXY_HOPS=0 CV_CORS_ORIGINS="" PORT=8000
+# glibc malloc: fixed thresholds and two arenas stop freed image buffers from piling up in a multi-threaded process.
+# Measured with scripts/deploy_simulation.py: eight simultaneous 12-megapixel uploads peak at about 250 MB with these
+# settings and at 370-580 MB without them (a Render Starter instance has 512 MB), at about 10 % more processing time.
+ENV MALLOC_ARENA_MAX=2 MALLOC_MMAP_THRESHOLD_=131072 MALLOC_TRIM_THRESHOLD_=131072
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/* \

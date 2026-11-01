@@ -109,6 +109,10 @@ jobs:
           curl -fs http://127.0.0.1:8000/api/health
       - name: Live workflow smoke test inside the container
         run: docker exec cv python tests/smoke_live.py http://127.0.0.1:8000 Ci-pass-12345
+      - name: Fingerprint everything the API can see (users, settings, signers, specimen / cheque / query images, models, reports)
+        run: |
+          docker exec cv python tests/persistence_check.py snapshot http://127.0.0.1:8000 Ci-pass-12345 > "$RUNNER_TEMP/state.json"
+          chmod 600 "$RUNNER_TEMP/state.json"
       - name: Server runs unprivileged and data is private
         run: |
           docker top cv -eo uid,args | tee /dev/stderr | grep "run.py --prod" | awk '{print $1}' | grep -qx 10001
@@ -132,6 +136,37 @@ jobs:
             -d '{"username":"admin","password":"Ci-pass-12345"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
           curl -fs "http://127.0.0.1:8000/api/cheques" -H "Authorization: Bearer $TOKEN" \
             | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["meta"]["total"]>=1,d;print("cheques after restart:",d["meta"]["total"])'
+          docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
+      - name: A stop is prompt and clean (docker stop sends SIGTERM to PID 1, which has no default action for it)
+        run: |
+          start=$(date +%s)
+          docker stop cv
+          elapsed=$(( $(date +%s) - start ))
+          code=$(docker inspect -f '{{.State.ExitCode}}' cv)
+          echo "stopped after ${elapsed}s with exit code ${code}"
+          test "$code" = 0
+          test "$elapsed" -lt 8
+          sudo find /srv/cvdata -name '.tmp-*' | tee /dev/stderr | wc -l | grep -qx 0
+      - name: Redeploy rehearsal - remove the container, create a new one on the same disk, compare everything
+        run: |
+          docker rm cv
+          docker run -d --name cv -p 8000:8000 -v /srv/cvdata:/data \
+            --memory=512m --memory-swap=512m -e CV_ADMIN_PASSWORD=Ci-pass-12345 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health >/dev/null && break; sleep 2; done
+          docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
+          docker logs cv 2>&1 | grep -E "^seed: [0-9]+ current$"
+      - name: Hard kill (SIGKILL, as after an out-of-memory kill or an expired grace period), then start again
+        run: |
+          docker kill cv
+          docker start cv
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8000/api/health >/dev/null && break; sleep 2; done
+          docker exec -i cv python tests/persistence_check.py verify http://127.0.0.1:8000 Ci-pass-12345 < "$RUNNER_TEMP/state.json"
+          docker exec -i cv python - <<'PY'
+          import sqlite3
+          rows = [r[0] for r in sqlite3.connect("/data/instance/chequeverify.db").execute("PRAGMA integrity_check")]
+          assert rows == ["ok"], rows
+          print("database integrity_check: ok")
+          PY
       - name: Behind one reverse proxy (as on Render) HSTS and the client address are honoured
         run: |
           sudo mkdir -p /srv/cvdata2 && sudo chown root:root /srv/cvdata2
@@ -150,6 +185,23 @@ jobs:
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             -d '{"username":"weakuser","password":"Short-1a","role":"operator"}')
           test "$code" = 400
+      - name: Memory - the largest accepted images, eight at once, inside a 512 MB container (the Render Starter plan)
+        run: |
+          sudo mkdir -p /srv/cvdata3 && sudo chown root:root /srv/cvdata3
+          docker run -d --name cvm -p 8002:8000 -v /srv/cvdata3:/data --memory=512m --memory-swap=512m \
+            -e CV_MIN_PASSWORD_LENGTH=12 -e CV_MAX_IMAGE_PIXELS=12000000 -e CV_MAX_CONCURRENT_IMAGES=2 \
+            -e CV_ADMIN_PASSWORD=Ci-pass-123456 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8002/api/health >/dev/null && break; sleep 2; done
+          python3 scripts/memory_probe.py http://127.0.0.1:8002 Ci-pass-123456 --side 3462 --parallel 8
+          test "$(docker inspect -f '{{.State.OOMKilled}}' cvm)" = false
+          echo "peak memory of the container (cgroup): $(docker exec cvm cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo n/a) bytes"
+      - name: Read-only root filesystem - the application writes only to /data and /tmp
+        run: |
+          sudo mkdir -p /srv/cvdata4 && sudo chown root:root /srv/cvdata4
+          docker run -d --name cvr -p 8003:8000 -v /srv/cvdata4:/data --read-only --tmpfs /tmp \
+            -e CV_ADMIN_PASSWORD=Ci-pass-12345 chequeverify
+          for i in $(seq 1 45); do curl -fs http://127.0.0.1:8003/api/health >/dev/null && break; sleep 2; done
+          docker exec cvr python tests/smoke_live.py http://127.0.0.1:8003 Ci-pass-12345
       - name: Container logs
         if: always()
-        run: docker logs cv; docker logs cvp 2>/dev/null || true
+        run: for c in cv cvp cvm cvr; do echo "=== $c"; docker logs $c 2>&1 | tail -n 80 || true; done

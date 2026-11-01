@@ -118,9 +118,10 @@ class MicrModel:
         return self.labels[k], float(sims[k])
 
     def save(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(path, samples=self.samples.reshape(-1, GLYPH_H, GLYPH_W),
-                            labels=np.array(self.labels), meta=json.dumps(self.meta))
+        from ..services import atomic          # a crash while saving must not leave a truncated model behind
+        with atomic.open_for_write(path) as f:
+            np.savez_compressed(f, samples=self.samples.reshape(-1, GLYPH_H, GLYPH_W),
+                                labels=np.array(self.labels), meta=json.dumps(self.meta))
 
     @classmethod
     def load(cls, path: Path) -> "MicrModel | None":

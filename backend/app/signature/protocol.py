@@ -346,8 +346,8 @@ def read_ledger(path: Path | None) -> list[dict]:
 
 
 def write_ledger(path: Path, entries: list[dict]) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(json.dumps(entries, indent=2))
+    from ..services import atomic          # the test-use ledger must never be left half-written
+    atomic.write_json(path, entries)
 
 
 # ------------------------------------------------------------------ validity checks

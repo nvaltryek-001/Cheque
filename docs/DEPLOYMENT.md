@@ -24,6 +24,22 @@ Put a TLS reverse proxy (nginx, Caddy, IIS) in front for anything beyond a priva
    you an `https://chequeverify-ai-xxxx.onrender.com` URL. Every push to `main` redeploys.
 - `render.yaml` uses the *starter* plan because a persistent disk is required to keep data; on the free
   plan the service works but loses all records on every restart/redeploy.
+- What Render's documentation says about a service with a disk (checked against docs.render.com, not exercised here
+  because nothing has been deployed): only files under the mount path (`/data`) survive a deploy or restart; the disk is
+  not available while the image is built or during a pre-deploy command, so nothing may depend on it then; a service
+  with a disk runs a single instance and **cannot do zero-downtime deploys** (expect a short outage on every deploy);
+  the disk is snapshotted daily and snapshots are kept for 7 days; when a service is stopped Render sends SIGTERM and
+  then SIGKILL after a delay (30 seconds by default). The server handles SIGTERM itself (see *Stopping and crashing*).
+- `PORT` is `10000` on Render; the blueprint states it, the entrypoint listens on `$PORT` and the health check follows it.
+- Environment values marked `sync: false` in a blueprint (`CV_ADMIN_PASSWORD`) are asked for only when the Blueprint is
+  first created. Add anything new afterwards (the `CV_SMTP_*` values) in the dashboard under Environment.
+- **Memory.** The starter plan has 512 MB. A 25-megapixel scan costs about 250 MB while it is processed and four at once
+  peaked above 1 GB in the rehearsal, which would end in an out-of-memory kill and a restart for every user. The blueprint
+  therefore sets `CV_MAX_IMAGE_PIXELS=12000000` (a full 600 dpi cheque is 10.7 MP) and `CV_MAX_CONCURRENT_IMAGES=2`
+  (others wait up to `CV_IMAGE_QUEUE_SECONDS`, then get `503 busy` with `Retry-After`), and the image sets glibc malloc
+  options. With these, eight simultaneous maximum-size uploads peaked at about 250 MB in the rehearsal (see
+  `reports/final/DEPLOYMENT_VERIFICATION.md` for what that measurement does and does not show). Raise the limits only
+  together with a larger plan.
 - The private datasets are not in git, so dataset audit/import/training screens show "not found" on the
   hosted copy. Enroll signers by uploading specimens instead, or keep the dataset work on your own machine.
 
@@ -46,7 +62,10 @@ the Windows firewall port to reach it from other PCs on the LAN.
 | `CV_PROXY_HOPS` | 0 | 1 behind Render / one load balancer; 0 when the app is reached directly |
 | `CV_RATE_LIMIT_PER_MIN` | 120 | keep; 0 switches the per-user limit off |
 | `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_IP_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` | 5, 20, 300 | keep |
-| `CV_MAX_IMAGE_PIXELS` | 25000000 | keep (a 300 dpi A4 scan is ≈ 8.7 million) |
+| `CV_MAX_IMAGE_PIXELS` | 25000000 | 12000000 on a 512 MB instance (set in `render.yaml`); a 300 dpi A4 scan is ≈ 8.7 million, a 600 dpi cheque ≈ 10.7 million |
+| `CV_MAX_CONCURRENT_IMAGES`, `CV_IMAGE_QUEUE_SECONDS` | 2, 30 | keep on a 512 MB instance; images are processed this many at a time, others wait this long and then get `503 busy` |
+| `CV_STOP_GRACE_SECONDS` | 20 | seconds the server may take to finish after SIGTERM before it ends itself (keep it below the platform's grace period; Render's is 30) |
+| `PORT` | 8000 (image), 10000 (Render) | set by the platform |
 | `CV_HSTS_MAX_AGE` | 31536000 | keep once HTTPS works; 0 while testing |
 | `CV_CORS_ORIGINS` | localhost dev origins (image: empty) | leave empty for the bundled UI |
 
@@ -57,13 +76,112 @@ available until delivery works. Choosing a mail service (and any cost or sender 
 Locked out after too many wrong passwords? Wait for the window to pass or run `python manage.py unlock-logins`
 inside the container (`docker exec <name> python manage.py unlock-logins`).
 
+## What is stored where, and what survives
+| Folder (in the image) | Holds | Survives a redeploy? |
+|---|---|---|
+| `/data/instance` | the SQLite database (users, signers, cheques, verifications, audit log, settings, sign-in throttle), `secret_key` (unless `CV_SECRET_KEY` is set), the signature test-use ledger | yes: it is on the disk |
+| `/data/instance/storage` | cheque images, signature crops, specimens, query images | yes |
+| `/data/models` | the trained MICR templates and signature model | yes (see the next section for how a new release refreshes them) |
+| `/data/reports` | evaluation and audit reports | yes |
+| `/data/.seed_manifest.json` | which shipped files were copied to the disk, and what they looked like | yes |
+| everything else in the container (code, `/tmp`) | nothing that matters | no, by design |
+
+The application writes only to these folders (and to a temporary folder for large uploads), so the container's own
+filesystem can be read-only (`docker run --read-only --tmpfs /tmp`); the CI job does exactly that.
+
+### How the shipped models and reports reach the disk
+The image contains the trained models (`backend/models_store`) and the reports (`reports/final`). At every start the
+entrypoint, **after dropping root**, brings them to the disk and records a SHA-256 of what it copied
+(`/data/.seed_manifest.json`):
+
+| State of the file on the disk | What happens |
+|---|---|
+| missing | copied (atomically: a temporary file, then a rename, so a kill cannot leave a half-copied model) |
+| identical to the shipped file | left alone |
+| different, but still exactly the copy made earlier | **updated** to the new release's file, so improved models reach an existing disk |
+| different and changed on the disk (a model retrained in the app, a regenerated report) | **kept**, and a line `seed: models/... kept: changed on this disk` is logged |
+| different and not in the manifest (a disk from before the manifest existed) | kept, with `kept: ... origin is unknown` |
+| not a regular file (a link, a folder) | left alone |
+
+To go back to the shipped model after retraining, delete the file on the disk (`docker exec <name> rm /data/models/...`
+or the Render shell) and restart: the shipped one is copied again. Nothing is ever overwritten that cannot be shown to
+be an untouched copy.
+
+### Stopping and crashing
+* **Stop.** A container's main process is PID 1, and the kernel gives PID 1 no default action for SIGTERM, so a server
+  without its own handler ignores `docker stop` and a Render deploy until the platform's grace period ends and kills it
+  in whatever it was doing. `run.py` installs a handler: the server stops, finishes what it can and exits with code 0 in
+  well under a second when idle. If something refuses to stop, a watchdog ends the process after `CV_STOP_GRACE_SECONDS`.
+  (`wsgi.py`, used by an external WSGI runner, does not install the handler.)
+* **Crash safety.** Models, reports, the secret key, the evaluation ledger and every stored image are written to a
+  temporary file in the same folder and renamed into place (`app/services/atomic.py`), so an out-of-memory kill, a power
+  cut or SIGKILL leaves the old file or the new file, never a truncated one. Leftover `.tmp-*` files older than a minute
+  are removed at the next start. SQLite runs in WAL mode and recovers by itself.
+* **Unfinished jobs.** A training or evaluation job that the stopped process never finished is marked `failed`
+  ("interrupted: the server stopped before this job finished; start it again") at the next start, not left "running".
+* **A damaged model file** no longer breaks every request: it is logged, the dashboard says "file damaged: retrain or
+  restore a backup", and the service runs as if that model had not been trained yet.
+* **One process only.** SQLite, the job lock and the start-up housekeeping assume a single server process on one disk.
+  Do not scale out, and do not run two containers on the same volume.
+
+## Backups and restore
+Render's daily snapshots (7 days) and your host's volume snapshots protect against losing the disk. A backup file made
+with the tool below protects against mistakes (a deleted signer, a bad import), is portable and can be copied off the
+server. Both are worth having.
+
+```bash
+# inside the container / on the machine that has the data folders (docker exec -it chequeverify bash)
+python manage.py backup --out /data/backups            # a folder that is NOT inside the data it backs up
+python manage.py verify-backup /data/backups/chequeverify-backup-20261101T120000Z.tar.gz
+python manage.py restore-backup FILE --into /restore   # a new, empty folder; verifies first
+```
+* One `.tar.gz` file (mode 600): the database (a consistent snapshot taken with SQLite's online backup, safe while the
+  server runs), the other files in the instance folder, all stored images (`--skip-images` leaves them out, then cheque
+  and specimen records point at images that are not in the backup), the models and the reports, plus a `MANIFEST.json`
+  with the size and SHA-256 of every file.
+* **Not in the backup, on purpose:** the secret key (a leaked backup must not allow forged sign-ins; everybody signs in
+  again after a restore, and on Render the key is an environment value anyway), and environment settings or passwords.
+* `verify-backup` reads the whole file and compares every checksum; `restore-backup` refuses anything that fails that
+  check, any entry that is not a plain file in a known folder (no `..`, links, absolute paths or odd characters, even if
+  the checksum list was forged to match), and a target that is not empty. After extracting it opens the database and
+  compares `integrity_check` and every table's row count with the backup's record. It never overwrites or deletes.
+* **The file is personal data** (user addresses, cheque images, signature specimens) and is **not encrypted** by the
+  tool. Keep it on an encrypted volume or encrypt it before it leaves the server, and copy it off the server: a backup on
+  the same disk does not survive losing the disk.
+* **Restoring for real.** Stop the service (on Render: suspend it), restore into a new empty folder, check it, then
+  replace the data: the restored folder has the layout of `/data` (`instance/` with `storage/` inside it, `models/`,
+  `reports/`). On a fresh Docker volume you can restore straight into it before the first start:
+  `docker run --rm -v chequeverify-data:/data -v "$PWD":/b chequeverify python manage.py restore-backup /b/FILE --into /data/restored`
+  and then move the folders up one level. Rehearse this once before you need it; `scripts/deploy_simulation.py` does so
+  with synthetic data on every run.
+* Pruning old backups is deliberately not automated: delete them yourself when you have decided how long to keep them.
+
+## Verifying a deployment
+* `python backend/tests/persistence_check.py snapshot BASE PASSWORD > state.json` before a redeploy and
+  `... verify BASE PASSWORD --state state.json` after it: compares users, settings, signers, the hash of every specimen,
+  cheque and query image, verification history, models, reports, that the session issued before the restart is still
+  valid (the secret key persisted) and that a locked-out account is still locked out. Exit code 0 means identical, 1 means
+  something differs (listed), 2 means it could not run. `--allow models,reports` tolerates files that a new release ships.
+  Delete `state.json` afterwards: it holds a short-lived sign-in token.
+* `sudo python3 scripts/deploy_simulation.py` rehearses the start-up, a redeploy, a kill, a new release, a backup and
+  restore, an empty disk and a hostile disk on this machine without Docker (root and `unshare` give the container-like
+  conditions; without them the affected checks are skipped and said so). `--profile docker` uses the Dockerfile's
+  settings only; the default profile adds the values from `render.yaml`.
+* `reports/final/DEPLOYMENT_VERIFICATION.md` records what was run, the numbers, and what could **not** be verified
+  (no Docker build, no Render deploy, Waitress not tested).
+
 ## Continuous integration
 `.github/workflows/ci.yml` runs on every push and weekly. Jobs: backend tests (dataset tests skip
 automatically), frontend type-check + Vite build, `dependency-audit` (`pip-audit`, `npm audit`, uploads a
 generated `package-lock.json`), `private-data-audit` (`scripts/prepush_audit.py --base origin/main`) and a
-Docker job (build, live smoke test, unprivileged user, private files, security headers, persistence across a
-restart, HSTS and client address behind one proxy hop, password policy). Actions are pinned to commit SHAs and
-the workflow token is read-only; Dependabot keeps pip, npm, Actions and Docker current.
+Docker job (build, live smoke test, a fingerprint of all stored data, unprivileged user, private files, security headers,
+a restart, a clean `docker stop` in under 8 seconds with exit code 0, a new container on the same disk compared with the
+fingerprint, a SIGKILL and restart followed by a database integrity check, HSTS and client address behind one proxy hop,
+password policy, eight simultaneous maximum-size uploads inside a 512 MB container that must not be OOM-killed, and a
+run with a read-only root filesystem). Actions are pinned to commit SHAs and the workflow token is read-only; Dependabot
+keeps pip, npm, Actions and Docker current. **The stop, redeploy, kill, memory and read-only steps were written without
+Docker available and have not run on GitHub yet; if one fails on the first run, the failure is information about the
+image, not necessarily about the step.**
 
 Before pushing, run the audit locally with your private terms file: `docs/SECURITY.md` → *Pre-push audit*.
 

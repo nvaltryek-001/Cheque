@@ -82,8 +82,8 @@ export default function Dashboard() {
           <Panel title="Engines and models">
             <div className="kv-grid">
               <div><span>OCR engine</span><b>{data.models.ocr_engine.available ? `${data.models.ocr_engine.name} ${data.models.ocr_engine.version}` : "Not available – fields must be entered manually"}</b></div>
-              <div><span>MICR reader</span><b>{data.models.micr_model.available ? `Trained on ${data.models.micr_model.trained_cheques} train-split cheques` : "Not trained"}</b></div>
-              <div><span>Signature model</span><b>{data.models.signature_model.version}</b></div>
+              <div><span>MICR reader</span><b>{data.models.micr_model.available ? `Trained on ${data.models.micr_model.trained_cheques} train-split cheques` : data.models.micr_model.error ? "File damaged: retrain or restore a backup" : "Not trained"}</b></div>
+              <div><span>Signature model</span><b>{data.models.signature_model.error ? `${data.models.signature_model.version} (model file damaged)` : data.models.signature_model.version}</b></div>
               <div><span>Decision thresholds</span><b>{data.models.signature_model.thresholds ? `match ≥ ${data.models.signature_model.thresholds.match.toFixed(3)} · mismatch ≤ ${data.models.signature_model.thresholds.mismatch.toFixed(3)}` : "baseline defaults"}</b></div>
             </div>
           </Panel>

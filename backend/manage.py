@@ -16,6 +16,9 @@
     python manage.py create-user NAME --role operator
     python manage.py reset-password NAME
     python manage.py unlock-logins              # clear the sign-in throttle (e.g. your own IP got blocked)
+    python manage.py backup --out DIR [--skip-images]     # consistent backup of database, images, models, reports
+    python manage.py verify-backup FILE                   # prove a backup is complete and unaltered (extracts nothing)
+    python manage.py restore-backup FILE --into EMPTY_DIR # verify, then extract into the standard data layout
 All dataset access is read-only.
 """
 from __future__ import annotations
@@ -31,6 +34,7 @@ from run import load_dotenv
 load_dotenv(Path(__file__).with_name(".env"))
 
 from app.config import Config  # noqa: E402
+from app.services import atomic  # noqa: E402
 from app.services.datasets import (audit_ocr_dataset, audit_signature_dataset, discover_ocr_images,  # noqa: E402
                                    load_signature_manifests)
 
@@ -41,7 +45,7 @@ MODELS = Path(Config.MODELS_DIR)
 def _write(name: str, data: dict) -> Path:
     REPORTS.mkdir(parents=True, exist_ok=True)
     p = REPORTS / name
-    p.write_text(json.dumps(data, indent=2, default=str))
+    atomic.write_json(p, data, default=str)
     print(f"wrote {p}")
     return p
 
@@ -130,7 +134,7 @@ def cmd_score_ocr(args) -> None:
         scoring.full_table_csv(rows, args.private_csv)
         print(f"private table (real + predicted values – do NOT commit): {args.private_csv}")
     if args.masked_report:
-        Path(args.masked_report).write_text(scoring.masked_table(rows), encoding="utf-8")
+        atomic.write_text(Path(args.masked_report), scoring.masked_table(rows))
         print(f"masked table (no values): {args.masked_report}")
 
 
@@ -214,11 +218,60 @@ def cmd_eval_signatures(args) -> None:
     print(text)
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / f"{stem}.json").write_text(json.dumps(report, indent=2, default=str))
-        (out_dir / f"{stem}.md").write_text(text, encoding="utf-8")
+        atomic.write_json(out_dir / f"{stem}.json", report, default=str)
+        atomic.write_text(out_dir / f"{stem}.md", text)
         print(f"wrote {out_dir / (stem + '.json')} and {out_dir / (stem + '.md')}")
     if not args.dataset and not report["validity"]["valid"]:
         sys.exit(1)
+
+
+def _backup_config() -> dict:
+    return {"INSTANCE_DIR": Config.INSTANCE_DIR, "DATABASE": Config.DATABASE, "STORAGE_DIR": Config.STORAGE_DIR,
+            "MODELS_DIR": Config.MODELS_DIR, "REPORTS_DIR": Config.REPORTS_DIR}
+
+
+def cmd_backup(args) -> None:
+    import os
+    from app.services import backup
+    os.umask(0o077)
+    try:
+        res = backup.create_backup(_backup_config(), Path(args.out), include_images=not args.skip_images)
+    except backup.BackupError as exc:
+        sys.exit(f"backup: {exc}")
+    print(f"wrote {res['path']}")
+    print(f"  {res['files']} files, {res['bytes']:,} bytes ({res['archive_bytes']:,} compressed)")
+    print("  database rows: " + ", ".join(f"{t} {n}" for t, n in res["tables"].items() if n))
+    if not res["include_images"]:
+        print("  NOTE: --skip-images: cheque and specimen images are NOT in this backup")
+    print("  The secret key is not included, so everyone signs in again after a restore.")
+    print("  This file holds personal data: store it encrypted and copy it off this server.")
+
+
+def cmd_verify_backup(args) -> None:
+    from app.services import backup
+    try:
+        res = backup.verify_backup(Path(args.file))
+    except backup.BackupError as exc:
+        sys.exit(f"verify-backup: {exc}")
+    if not res["ok"]:
+        for problem in res["problems"][:20]:
+            print(f"  PROBLEM: {problem}")
+        sys.exit(f"verify-backup: {len(res['problems'])} problem(s); do not rely on this backup")
+    created = (res["manifest"] or {}).get("created_at", "?")
+    print(f"OK: {res['files']} files, {res['bytes']:,} bytes, created {created}; every file matches its recorded SHA-256")
+
+
+def cmd_restore_backup(args) -> None:
+    import os
+    from app.services import backup
+    os.umask(0o077)
+    try:
+        res = backup.restore_backup(Path(args.file), Path(args.into))
+    except backup.BackupError as exc:
+        sys.exit(f"restore-backup: {exc}")
+    print(f"restored {res['files']} files ({res['bytes']:,} bytes) into {res['into']}, backup made {res['created_at']}")
+    print("  database checked: integrity_check ok, row counts equal the backup's record")
+    print("  Layout: instance/ (database, storage/ inside it), models/, reports/. Start the server with these as its data folders.")
 
 
 def cmd_unlock_logins(_args) -> None:
@@ -300,6 +353,17 @@ def main() -> None:
     ev.add_argument("--ref-specimens", type=int, help="reference specimens per signer (default: the deployed policy, 5)")
     ev.add_argument("--ref-days", type=int, help="signing days among the references (default: the deployed policy, 2)")
     ev.set_defaults(fn=cmd_eval_signatures)
+    bk = sub.add_parser("backup", help="consistent backup of the database, images, models and reports (see docs/DEPLOYMENT.md)")
+    bk.add_argument("--out", required=True, help="folder for the backup file; must not be inside the data folders")
+    bk.add_argument("--skip-images", action="store_true", help="leave out cheque and specimen images (records then point at missing images)")
+    bk.set_defaults(fn=cmd_backup)
+    vb = sub.add_parser("verify-backup", help="check that a backup is complete and unaltered; extracts nothing")
+    vb.add_argument("file")
+    vb.set_defaults(fn=cmd_verify_backup)
+    rb = sub.add_parser("restore-backup", help="verify, then extract a backup into a new, empty folder")
+    rb.add_argument("file")
+    rb.add_argument("--into", required=True, help="a new or empty folder; nothing is overwritten")
+    rb.set_defaults(fn=cmd_restore_backup)
     sub.add_parser("unlock-logins").set_defaults(fn=cmd_unlock_logins)
     r = sub.add_parser("reset-password")
     r.add_argument("username")

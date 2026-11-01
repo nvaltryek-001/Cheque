@@ -9,6 +9,7 @@ from flask import Blueprint, current_app, g, request, send_file
 
 from ..db import execute, now_iso, query, row_to_dict
 from ..ocr.fields import FIELD_ORDER
+from ..services.limits import image_slot
 from ..services import audit, cheques, storage
 from ..services.auth import login_required
 from ..services.throttle import rate_limited
@@ -30,6 +31,7 @@ def _get(cid: int):
 @bp.post("/api/cheques")
 @login_required("admin", "operator")
 @rate_limited()
+@image_slot
 def upload():
     data, img, name = storage.read_upload(request.files.get("file"))
     dup = query("SELECT id FROM cheques WHERE sha256=?", (storage.sha256(data),), one=True)
@@ -46,6 +48,7 @@ def upload():
 @bp.post("/api/cheques/batch")
 @login_required("admin", "operator")
 @rate_limited(cost=lambda: max(1, len(request.files.getlist("files"))))
+@image_slot
 def batch():
     files = request.files.getlist("files")
     if not files:
@@ -133,6 +136,7 @@ def update_cheque(cid: int):
 @bp.post("/api/cheques/<int:cid>/reprocess")
 @login_required("admin", "operator")
 @rate_limited()
+@image_slot
 def reprocess(cid: int):
     _get(cid)
     cheques.reprocess(cid)
@@ -171,6 +175,7 @@ def cheque_signature(cid: int):
 @bp.post("/api/cheques/<int:cid>/signature-crop")
 @login_required("admin", "operator")
 @rate_limited()
+@image_slot
 def set_signature_crop(cid: int):
     row = _get(cid)
     data = json_body()

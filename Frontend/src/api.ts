@@ -311,8 +311,8 @@ export interface Verification {
 }
 export interface ModelStatus {
   ocr_engine: { name: string; available: boolean; version: string };
-  micr_model: { available: boolean; trained_cheques: number | null; glyphs: number | null };
-  signature_model: { available: boolean; version: string; thresholds: { match: number; mismatch: number } | null; trained_at: string | null };
+  micr_model: { available: boolean; error?: string | null; trained_cheques: number | null; glyphs: number | null };
+  signature_model: { available: boolean; error?: string | null; version: string; thresholds: { match: number; mismatch: number } | null; trained_at: string | null };
 }
 export interface Run {
   id: number;
