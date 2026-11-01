@@ -7,7 +7,7 @@ Pillow>=10               # image header check before decoding (also a reportlab 
 waitress>=3.0            # production WSGI server (python run.py --prod)
 
 # Tests
-pytest>=8                # [9.1.1]
+pytest>=9.2.0                # [9.1.1]
 
 # OCR engine: EITHER keep your existing PaddleOCR 3.x environment (auto-detected) ...
 #   paddlepaddle / paddleocr>=3.0   (install per https://www.paddleocr.ai)
