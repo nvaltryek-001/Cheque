@@ -46,4 +46,4 @@ def test_signature_features_match_golden(name):
 def test_micr_reader_matches_golden():
     out = read_micr(micr_cheque(), MicrModel.load(MODELS / "micr_e13b.npz"))
     assert out["raw"] == GOLDEN["micr"]
-    assert out["cheque_number"] == "123456" and out["micr_code"] == "500211012"
+    assert out["cheque_number"] == "123456" and out["micr_code"] == "999888777"

@@ -286,7 +286,7 @@ extractor = FieldExtractor()
 
 tests = [
     ("IFSC correction", lambda: extractor.extract_ifsc_code("IFS CODE - UTI80000425")),
-    ("Amount words", lambda: extractor.extract_amount_words("Twelve lack twenty thousand")),
+    ("Amount words", lambda: extractor.extract_amount_words("Eleven lack forty thousand")),
     ("Date standard", lambda: extractor.extract_date("Date: 19/11/2015")),
     ("Date split", lambda: extractor.extract_date("DATE\n1\n9\n1\n1\n2\n0\n1\n5")),
     ("Unknown bank", lambda: extractor.extract_bank_name("", None, {"bank": "UNKNOWN"})),
@@ -298,7 +298,7 @@ for name, test in tests:
     print(f"{name}: {result}")
 
 assert extractor.extract_ifsc_code("IFS CODE - UTI80000425")[0] == "UTIB0000425"
-assert extractor.extract_amount_words("Twelve lack twenty thousand")[0] == "Twelve lakh twenty thousand"
+assert extractor.extract_amount_words("Eleven lack forty thousand")[0] == "Eleven lakh forty thousand"
 assert extractor.extract_date("Date: 19/11/2015")[0] == "19/11/2015"
 assert extractor.extract_date("DATE\n1\n9\n1\n1\n2\n0\n1\n5")[0] == "19112015"
 assert extractor.extract_bank_name("", None, {"bank": "UNKNOWN"})[0] is None

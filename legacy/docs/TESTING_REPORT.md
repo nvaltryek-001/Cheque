@@ -4,7 +4,7 @@
 
 - Syndicate: five-image API regression reported 50/50 populated fields.
 - Axis and ICICI: selected image tests reported successful extraction.
-- ICICI 162954.jpeg: subsequent API diagnostic returned all ten target fields.
+- One ICICI image: subsequent API diagnostic returned all ten target fields.
 
 ## Full regression
 The attempted 20-image run used an incorrect directory:

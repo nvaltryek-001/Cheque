@@ -199,6 +199,12 @@ docker run -p 8000:8000 -e CV_ADMIN_PASSWORD='Choose-a-strong-one-123' -v cheque
 Or connect this repository to Render as a Blueprint (`render.yaml`). Full guide: `docs/DEPLOYMENT.md`.
 Shortcut that opens Render's Blueprint page with this repository and the `chequeverify-v2` branch filled in (Free plan, no payment needed; Render asks for `CV_ADMIN_PASSWORD`; **on the Free plan all data is erased when the instance sleeps or restarts**, and `render.paid.yaml` is the Starter plan with a 1 GB disk for data that must survive):
 <https://render.com/deploy?repo=https://github.com/nvaltryek-001/Cheque/tree/chequeverify-v2>
+
+When the service says **Live**, test it from your own computer with your own images (asks for the administrator password with hidden
+typing; prints counts and seconds only, never a value read from a cheque; removes what it created):
+```bash
+python3 scripts/live_check.py https://YOUR-SERVICE.onrender.com --cheques "<OCR dataset folder>" --signatures "<signature dataset folder>"
+```
 GitHub Actions (`.github/workflows/ci.yml`) runs the backend tests, the Vite build, a dependency audit, the private-data audit
 and, in a real container, the live smoke test, persistence across restart, redeploy and hard kill, a clean `docker stop`, the
 reverse-proxy headers and a 512 MB memory check (results: `reports/final/DEPLOYMENT_VERIFICATION.md`).
@@ -206,8 +212,8 @@ reverse-proxy headers and a 512 MB memory check (results: `reports/final/DEPLOYM
 The Docker image accepts images up to **12 megapixels** (`CV_MAX_IMAGE_PIXELS`; larger ones are refused with `413 image_too_large`)
 and processes two at a time (`CV_MAX_CONCURRENT_IMAGES`; others wait, then get `503 busy`), so it fits a 512 MB instance.
 Raise both on a host with more memory. **The hosted copy starts empty**: the private datasets are not in git or in the image;
-sign in as administrator and use *Batch upload* to load cheques. A cheque takes about 4 s of OCR on 2 CPUs (a small hosted
-instance is slower).
+sign in as administrator and use *Batch upload* to load cheques. A cheque takes about 4 s of OCR on 2 CPUs; on the Render Free
+plan (a tenth of a CPU) expect roughly half a minute each, an estimate not yet measured there.
 
 The previous implementation (v1) is preserved unchanged under `legacy/`.
 

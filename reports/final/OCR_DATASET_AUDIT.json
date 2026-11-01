@@ -1,6 +1,6 @@
 {
   "dataset": "ocr",
-  "generated_at": "2026-10-31T06:33:29+00:00",
+  "generated_at": "2026-11-01T15:56:06+00:00",
   "root_exists": true,
   "issues": [
     {
@@ -63,68 +63,68 @@
   "exact_duplicate_groups": [],
   "same_template_pairs": [
     [
-      "test/icici/162952.jpeg",
-      "train/icici/162949.jpeg"
+      "test/icici/#2",
+      "train/icici/#19"
     ],
     [
-      "test/icici/162955.jpeg",
-      "train/icici/162945.jpeg"
+      "test/icici/#5",
+      "train/icici/#15"
     ],
     [
-      "test/syndicate/110248.jpeg",
-      "test/syndicate/110250.jpeg"
+      "test/syndicate/#3",
+      "test/syndicate/#5"
     ],
     [
-      "test/syndicate/110249.jpeg",
-      "train/syndicate/110244.png"
+      "test/syndicate/#4",
+      "train/syndicate/#18"
     ],
     [
-      "test/syndicate/110249.jpeg",
-      "val/syndicate/110252.jpeg"
+      "test/syndicate/#4",
+      "vaildate/syndicate/#2"
     ],
     [
-      "test/syndicate/110249.jpeg",
-      "val/syndicate/110257.jpeg"
+      "test/syndicate/#4",
+      "vaildate/syndicate/#4"
     ],
     [
-      "test/syndicate/110250.jpeg",
-      "val/syndicate/110253.jpeg"
+      "test/syndicate/#5",
+      "vaildate/syndicate/#3"
     ],
     [
-      "train/canara/405101.png",
-      "train/canara/405102.png"
+      "train/canara/#11",
+      "train/canara/#12"
     ],
     [
-      "train/canara/405101.png",
-      "train/canara/405107.png"
+      "train/canara/#11",
+      "train/canara/#16"
     ],
     [
-      "train/icici/162931.jpeg",
-      "train/icici/162934.jpeg"
+      "train/icici/#2",
+      "train/icici/#4"
     ],
     [
-      "train/icici/162949.jpeg",
-      "val/icici/162956.jpeg"
+      "train/icici/#19",
+      "vaildate/icici/#1"
     ],
     [
-      "train/syndicate/083657.png",
-      "train/syndicate/110232.png"
+      "train/syndicate/#3",
+      "train/syndicate/#7"
     ],
     [
-      "train/syndicate/110239.png",
-      "train/syndicate/110243.png"
+      "train/syndicate/#14",
+      "train/syndicate/#17"
     ],
     [
-      "train/syndicate/110239.png",
-      "val/syndicate/110253.jpeg"
+      "train/syndicate/#14",
+      "vaildate/syndicate/#3"
     ],
     [
-      "train/syndicate/110244.png",
-      "val/syndicate/110252.jpeg"
+      "train/syndicate/#18",
+      "vaildate/syndicate/#2"
     ],
     [
-      "val/syndicate/110252.jpeg",
-      "val/syndicate/110257.jpeg"
+      "vaildate/syndicate/#2",
+      "vaildate/syndicate/#4"
     ]
   ],
   "same_template_note": "Pairs whose 8x8 difference-hash is within 2 bits. Inspection shows these are the same blank cheque template filled with different typed content - not duplicated samples - but it means test cheques share layouts with training cheques, so layout-based extraction results are optimistic for unseen templates.",

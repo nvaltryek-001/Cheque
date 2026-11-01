@@ -62,6 +62,7 @@ def cmd_audit(_args) -> None:
 def cmd_train_micr(_args) -> None:
     import cv2
     from app.ocr.micr import read_micr, train_from_dataset
+    from app.services.jobs import _digits_wrong as digits_wrong
     items = discover_ocr_images(Path(Config.OCR_DATASET_DIR))
     model, meta = train_from_dataset([i for i in items if i["split"] == "train"])
     MODELS.mkdir(parents=True, exist_ok=True)
@@ -69,7 +70,7 @@ def cmd_train_micr(_args) -> None:
     out = {"training": meta, "label_source": "6-digit filename stem = first MICR group", "evaluation": {}}
     for split in ("val", "test"):
         n = hit = 0
-        errors = []
+        errors = []                    # position and number of wrong digits only: file names are the cheque numbers
         for it in (i for i in items if i["split"] == split):
             stem = Path(it["filename"]).stem
             if not (stem.isdigit() and len(stem) == 6):
@@ -78,7 +79,7 @@ def cmd_train_micr(_args) -> None:
             n += 1
             hit += r["cheque_number"] == stem
             if r["cheque_number"] != stem:
-                errors.append({"file": it["filename"], "read": r["cheque_number"]})
+                errors.append({"image": f"{split} #{n}", "digits_wrong": digits_wrong(stem, r["cheque_number"])})
         out["evaluation"][split] = {"labelled": n, "exact_match": hit,
                                     "accuracy_pct": round(100 * hit / n, 1) if n else None, "errors": errors}
         print(f"MICR cheque-number exact match on {split}: {hit}/{n}")

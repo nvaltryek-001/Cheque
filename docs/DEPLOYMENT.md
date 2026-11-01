@@ -42,7 +42,8 @@ blueprint with a 1 GB persistent disk, for data that must survive.
    `https://chequeverify-ai-xxxx.onrender.com` URL. The blueprint turns auto-deploy off, so a push never restarts the
    service (which would erase its temporary data); to run newer code use **Manual Deploy → Deploy latest commit**.
 4. Open the URL → *Administrator sign-in* → user `admin` and the password from step 3. Sign-in by emailed code needs
-   the `CV_SMTP_*` values (below); until they are set only the administrator sign-in works.
+   the `CV_SMTP_*` values (below); until they are set only the administrator sign-in works. To test the running service with your
+   own images, use `scripts/live_check.py` (see *Verifying a deployment*).
 5. The hosted copy starts empty. The private datasets are not in git or in the image. To use your own cheques, sign in
    and use the batch upload on the Cheques page; signature specimens are added on the Signers page.
 
@@ -184,6 +185,16 @@ python manage.py restore-backup FILE --into /restore   # a new, empty folder; ve
 * Pruning old backups is deliberately not automated: delete them yourself when you have decided how long to keep them.
 
 ## Verifying a deployment
+* `python3 scripts/live_check.py https://YOUR-SERVICE.onrender.com --cheques "<OCR dataset folder>" --signatures "<signature dataset folder>"`
+  checks a running service from the outside, with your own images, on your own computer (Python 3 only, nothing to install):
+  it waits for a sleeping service to wake, then checks health, the page and its files, the security headers, the sign-in
+  options, that a visitor who is not signed in is refused, that a wrong password is refused; asks for the administrator
+  password with hidden typing (or reads `CV_LIVE_PASSWORD`; never printed, never stored); checks the trained models; uploads
+  cheques one at a time and reports seconds, fields read and fields flagged for review; enrols a few signers and verifies
+  the enrolled image and the altered copies; and removes what it created (`--keep` leaves it visible in the application).
+  It prints counts, decisions and seconds only, never a file name or a value read from a cheque, so its output can be pasted
+  into a report. Exit code 0 means every check passed. Because it signs in as the administrator, run it only against a
+  service you own; on the Free plan the test cheques and signers vanish by themselves when the service sleeps.
 * `python backend/tests/persistence_check.py snapshot BASE PASSWORD > state.json` before a redeploy and
   `... verify BASE PASSWORD --state state.json` after it: compares users, settings, signers, the hash of every specimen,
   cheque and query image, verification history, models, reports, that the session issued before the restart is still

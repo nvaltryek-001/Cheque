@@ -94,41 +94,46 @@ def audit_ocr_dataset(root: Path) -> dict:
     per_split = Counter(i["split"] for i in items)
     per_bank_split: dict = defaultdict(Counter)
     ext_counter, fmt_counter, dims = Counter(), Counter(), Counter()
+    # The file names of this dataset are the cheque numbers, so a report refers to an image by its position inside its
+    # split and bank folder ("train/icici/#7", in sorted order), never by name. Anyone holding the dataset can look it up.
     mismatched_ext, corrupted, records = [], [], []
+    rank: Counter = Counter()
     for it in items:
+        rank[(it["split_dir"], it["bank"])] += 1
+        ref = f'{it["split_dir"]}/{it["bank"]}/#{rank[(it["split_dir"], it["bank"])]}'
         info = _image_info(it["path"])
         ext = it["path"].suffix.lower().lstrip(".")
         ext = "jpeg" if ext == "jpg" else ext
         ext_counter[ext] += 1
         fmt_counter[info["format"]] += 1
         if info["format"] != ext:
-            mismatched_ext.append(f'{it["split_dir"]}/{it["bank"]}/{it["filename"]} (named .{ext}, content {info["format"]})')
+            mismatched_ext.append(f'{ref} (named .{ext}, content {info["format"]})')
         if not info["decodable"]:
-            corrupted.append(f'{it["split_dir"]}/{it["bank"]}/{it["filename"]}')
+            corrupted.append(ref)
         else:
             dims[f'{info["width"]}x{info["height"]}'] += 1
         per_bank_split[it["bank"]][it["split"]] += 1
         stem = it["path"].stem
-        records.append({**info, "split": it["split"], "bank": it["bank"], "filename": it["filename"],
+        records.append({**info, "split": it["split"], "bank": it["bank"], "filename": it["filename"], "ref": ref,
                         "stem_is_cheque_number": stem.isdigit() and len(stem) == 6})
 
     # exact + near duplicates and cross-split leakage
     by_hash = defaultdict(list)
     for r in records:
         by_hash[r["sha256"]].append(r)
-    exact_dups = [[f'{x["split"]}/{x["bank"]}/{x["filename"]}' for x in v] for v in by_hash.values() if len(v) > 1]
+    exact_groups = [v for v in by_hash.values() if len(v) > 1]
+    exact_dups = [[x["ref"] for x in v] for v in exact_groups]
     near_dups = []
     rs = [r for r in records if r.get("dhash")]
     for i in range(len(rs)):
         for j in range(i + 1, len(rs)):
             if rs[i]["sha256"] != rs[j]["sha256"] and hamming(rs[i]["dhash"], rs[j]["dhash"]) <= 2:
-                near_dups.append([f'{rs[i]["split"]}/{rs[i]["bank"]}/{rs[i]["filename"]}',
-                                  f'{rs[j]["split"]}/{rs[j]["bank"]}/{rs[j]["filename"]}'])
-    stem_splits = defaultdict(set)
+                near_dups.append([rs[i]["ref"], rs[j]["ref"]])
+    stem_refs = defaultdict(list)
     for r in records:
-        stem_splits[(r["bank"], Path(r["filename"]).stem)].add(r["split"])
-    leaked_names = [f"{b}/{s}" for (b, s), sp in stem_splits.items() if len(sp) > 1]
-    leaked_hash = [v for v in exact_dups if len({p.split("/")[0] for p in v}) > 1]
+        stem_refs[(r["bank"], Path(r["filename"]).stem)].append((r["split"], r["ref"]))
+    leaked_names = [[ref for _, ref in v] for v in stem_refs.values() if len({sp for sp, _ in v}) > 1]
+    leaked_hash = [[x["ref"] for x in v] for v in exact_groups if len({x["split"] for x in v}) > 1]
 
     report.update({
         "total_images": len(items),
@@ -225,6 +230,9 @@ def audit_signature_dataset(root: Path) -> dict:
         report["issues"].append({"severity": "error", "message": "genuine_signatures.csv not found under the signature dataset directory."})
         return report
     base, genuine, altered = m["base"], m["genuine"], m["altered"]
+    for kind, rows in (("genuine", genuine), ("altered", altered)):     # file names are account numbers: refer to rows by position
+        for n, r in enumerate(rows, 1):
+            r["_ref"] = f"{kind} #{n}"
     report["root_exists"] = True
     report["manifest_columns"] = {
         "genuine": list(genuine[0].keys())[:4] if genuine else [],
@@ -236,16 +244,16 @@ def audit_signature_dataset(root: Path) -> dict:
         for r in rows:
             p: Path = r["path"]
             if not p.is_file():
-                missing.append(f'{r.get("split")}/{r.get("bank")}/{r.get("filename")}')
+                missing.append(r["_ref"])
                 continue
             info = _image_info(p)
             fmts[info["format"]] += 1
             if not info["decodable"]:
-                corrupted.append(r["filename"])
+                corrupted.append(r["_ref"])
                 continue
             dims[(info["width"], info["height"])] += 1
             r["_sha"], r["_dhash"], r["_w"], r["_h"] = info["sha256"], info["dhash"], info["width"], info["height"]
-            hashes.setdefault(info["sha256"], []).append(f'{kind}:{r["filename"]}')
+            hashes.setdefault(info["sha256"], []).append(r["_ref"])
         ws = [r["_w"] for r in rows if "_w" in r]
         hs = [r["_h"] for r in rows if "_h" in r]
         size = {"min_w": min(ws), "max_w": max(ws), "median_w": int(np.median(ws)),
@@ -262,24 +270,28 @@ def audit_signature_dataset(root: Path) -> dict:
         signer_splits[r.get("signer_id")].add(r["split_norm"])
         signer_banks[r.get("signer_id")].add(r.get("bank"))
     genuine_by_signer = {r.get("signer_id"): r for r in genuine}
-    bad_split = [r["filename"] for r in genuine + altered if r["split_norm"] not in ("train", "val", "test")]
-    bad_bank = [r["filename"] for r in genuine + altered if r.get("bank", "").lower() not in KNOWN_BANKS]
-    dup_filenames = [f for f, c in Counter(r["filename"] for r in genuine + altered).items() if c > 1]
+    bad_split = [r["_ref"] for r in genuine + altered if r["split_norm"] not in ("train", "val", "test")]
+    bad_bank = [r["_ref"] for r in genuine + altered if r.get("bank", "").lower() not in KNOWN_BANKS]
+    name_count = Counter(r["filename"] for r in genuine + altered)
+    first_row: dict = {}
+    for r in genuine + altered:
+        first_row.setdefault(r["filename"], r["_ref"])
+    dup_filenames = [first_row[f] for f, c in name_count.items() if c > 1]
 
     # altered -> target mapping checks
     unmapped, split_mismatch, bank_mismatch, name_mismatch = [], [], [], []
     for r in altered:
         tgt = genuine_by_signer.get(r.get("target_signer_id"))
         if tgt is None:
-            unmapped.append(r["filename"])
+            unmapped.append(r["_ref"])
             continue
         if tgt["split_norm"] != r["split_norm"]:
-            split_mismatch.append(r["filename"])
+            split_mismatch.append(r["_ref"])
         if tgt.get("bank") != r.get("bank"):
-            bank_mismatch.append(r["filename"])
+            bank_mismatch.append(r["_ref"])
         stem = r["filename"].rsplit("_forged", 1)[0]
         if stem != Path(tgt["filename"]).stem:
-            name_mismatch.append({"altered": r["filename"], "target_genuine": tgt["filename"]})
+            name_mismatch.append({"altered": r["_ref"], "target_genuine": tgt["_ref"]})
     per_target = Counter(r.get("target_signer_id") for r in altered)
 
     all_hash = defaultdict(list)
@@ -294,11 +306,12 @@ def audit_signature_dataset(root: Path) -> dict:
     for i in range(len(gl)):
         for j in range(i + 1, len(gl)):
             if gl[i].get("signer_id") != gl[j].get("signer_id") and hamming(gl[i]["_dhash"], gl[j]["_dhash"]) <= 3:
-                near.append([gl[i]["filename"], gl[j]["filename"]])
+                near.append([gl[i]["_ref"], gl[j]["_ref"]])
 
     on_disk_g = {p.name for p in (base / "signature_dataset").rglob("*") if p.is_file()} if (base / "signature_dataset").is_dir() else set()
     on_disk_a = {p.name for p in (base / "forged_signatures").rglob("*") if p.is_file()} if (base / "forged_signatures").is_dir() else set()
-    unlisted = sorted((on_disk_g - {r["filename"] for r in genuine}) | (on_disk_a - {r["filename"] for r in altered}))
+    unlisted_names = (on_disk_g - {r["filename"] for r in genuine}) | (on_disk_a - {r["filename"] for r in altered})
+    unlisted = [f"unlisted file #{n}" for n in range(1, len(unlisted_names) + 1)]
 
     split_signers = defaultdict(set)
     for r in genuine:

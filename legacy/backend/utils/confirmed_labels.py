@@ -9,15 +9,17 @@ GROUND_TRUTH = PROJECT / "phase3" / "data" / "evaluation" / "ground_truth_templa
 TRAIN_FIELDS = {"date": "date", "amount": "amount_figures", "amount_words": "amount_words", "payee_name": "payee_name"}
 
 
+# The four labels that were typed in here belonged to cheques of a private dataset. They were replaced by invented ones
+# before this repository was published (see reports/final/SECURITY_AUDIT.md); the structure is unchanged.
 BATCH1 = {
-    "309062": {"date": "25/01/2015", "amount_figures": "3,29,000/-",
-               "amount_words": "Three lakh twenty nine thousand", "payee_name": "Vijay Kumar Singh"},
-    "309066": {"date": "24/03/2016", "amount_figures": "25,20,000/-",
-               "amount_words": "Twenty Five lakh Twenty thousand", "payee_name": "PRABHU PRIYA T"},
-    "309067": {"date": "25/03/2016", "amount_figures": "1,40,000",
-               "amount_words": "One lakh Fourty thousand", "payee_name": "K. SRAVANI KUMARI"},
-    "309068": {"date": "30/04/2016", "amount_figures": "42,40,000/-",
-               "amount_words": "Fourty Two lakh fourty thousand", "payee_name": "T. TRIPURA REDDY"},
+    "100001": {"date": "01/01/2020", "amount_figures": "1,00,000/-",
+               "amount_words": "One Lakh Only", "payee_name": "Example Payee One"},
+    "100002": {"date": "02/02/2020", "amount_figures": "2,50,000/-",
+               "amount_words": "Two Lakh Fifty Thousand Only", "payee_name": "Example Payee Two"},
+    "100003": {"date": "03/03/2020", "amount_figures": "75,000/-",
+               "amount_words": "Seventy Five Thousand Only", "payee_name": "Example Payee Three"},
+    "100004": {"date": "04/04/2020", "amount_figures": "10,00,000/-",
+               "amount_words": "Ten Lakh Only", "payee_name": "Example Payee Four"},
 }
 
 

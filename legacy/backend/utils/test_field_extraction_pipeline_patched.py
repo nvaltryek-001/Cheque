@@ -7,11 +7,12 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 FieldExtractor = module.FieldExtractor
 
+# Invented values: the lines that were here came from cheques of a private dataset (see reports/final/SECURITY_AUDIT.md).
 CASES = [
-    ("AXIS", "309090500211012:42616031", "309090", "500211012"),
-    ("CANARA", "405112#500015048#31", "405112", "500015048"),
-    ("ICICI", '162952"500229009:55145231', "162952", "500229009"),
-    ("SYNDICATE", '110246"500025033:290062"31', "110246", "500025033"),
+    ("AXIS", "246810999888777:13579031", "246810", "999888777"),
+    ("CANARA", "135792#999888776#31", "135792", "999888776"),
+    ("ICICI", '246813"999888775:24680131', "246813", "999888775"),
+    ("SYNDICATE", '135795"999888774:246802"31', "135795", "999888774"),
 ]
 
 def test_bottom_line_extraction():
@@ -24,7 +25,7 @@ def test_bottom_line_extraction():
 
 def test_account_number_alone_is_not_micr_or_cheque():
     extractor = FieldExtractor()
-    text = "A/C NO.\n911010049001598\nAccount details"
+    text = "A/C NO.\n123456789012345\nAccount details"
     assert extractor.extract_micr_code(text)[0] is None
     assert extractor.extract_cheque_number(text)[0] is None
 

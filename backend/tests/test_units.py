@@ -116,12 +116,12 @@ def test_fusion_model_monotone_and_thresholds(tmp_path):
 
 # ---------------------------------------------------------------- amounts
 @pytest.mark.parametrize("words,value", [
-    ("Twenty Three Lakh Fifty Thousand", 2350000),
-    ("One Crore Forty Lakhs", 14000000),
-    ("Fifty-Five Thousand Four Hundred Ninety Only", 55490),
-    ("Thirty Three Lakhs Only", 3300000),
-    ("Forty Two Thousand And Twenty", 42020),
-    ("Twenty-Six Lakh Twelve Thousan", 2612000),  # OCR typo tolerated
+    ("Eighteen Lakh Seventy Five Thousand", 1875000),
+    ("Two Crore Sixty Lakhs", 26000000),
+    ("Sixty-Three Thousand Two Hundred Forty Only", 63240),
+    ("Seventeen Lakhs Only", 1700000),
+    ("Thirty Six Thousand And Fifteen", 36015),
+    ("Twenty-Nine Lakh Fourteen Thousan", 2914000),  # OCR typo tolerated
 ])
 def test_words_to_number(words, value):
     assert amounts.words_to_number(words) == value

@@ -92,6 +92,14 @@ def run_signature(app, config: dict, progress) -> tuple[dict, str]:
     return report, model.version
 
 
+def _digits_wrong(expected: str, read: str) -> int:
+    """How many of the six digits differ (all of them when nothing was read). Reports carry this, never the digits."""
+    read = read or ""
+    if not read:
+        return len(expected)
+    return sum(a != b for a, b in zip(expected, read)) + abs(len(expected) - len(read))
+
+
 def run_micr(app, config: dict, progress) -> tuple[dict, str]:
     from ..ocr.micr import read_micr, train_from_dataset
     import cv2
@@ -107,7 +115,7 @@ def run_micr(app, config: dict, progress) -> tuple[dict, str]:
     for split in ("val", "test"):
         progress(f"evaluating on {split}")
         n = hit = 0
-        misses = []
+        misses = []                    # position and number of wrong digits only: file names are the cheque numbers
         for it in (i for i in items if i["split"] == split):
             stem = Path(it["filename"]).stem
             if not (stem.isdigit() and len(stem) == 6):
@@ -116,7 +124,7 @@ def run_micr(app, config: dict, progress) -> tuple[dict, str]:
             n += 1
             hit += r["cheque_number"] == stem
             if r["cheque_number"] != stem:
-                misses.append({"file": it["filename"], "read": r["cheque_number"]})
+                misses.append({"image": f"{split} #{n}", "digits_wrong": _digits_wrong(stem, r["cheque_number"])})
         results[split] = {"labelled": n, "exact_match": hit, "accuracy_pct": round(100 * hit / n, 1) if n else None,
                           "errors": misses}
     model.save(Path(app.config["MODELS_DIR"]) / model_store.MICR_FILE)

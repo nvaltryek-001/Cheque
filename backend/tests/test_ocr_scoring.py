@@ -7,15 +7,15 @@ from app.ocr import scoring
 
 LABEL = {"file": "a/1.png", "bank_name": "Axis Bank", "branch_name": "Kompally - 500014", "ifsc_code": "UTIB0000425",
          "cheque_number": "123456", "micr_code": "110000123", "account_number": "700123456789098",
-         "date": "2026-07-21", "payee_name": "Meera Kulkarni", "amount_value": "2267000",
-         "amount_words": "Twenty-Two Lakh Sixty-Seven Thousand Only"}
+         "date": "2026-07-21", "payee_name": "Meera Kulkarni", "amount_value": "1825000",
+         "amount_words": "Eighteen Lakh Twenty-Five Thousand Only"}
 
 
 @pytest.mark.parametrize("field,pred,expected", [
     ("payee_name", "MEERA  KULKARNI", True), ("payee_name", "Meera Kulkarn", False),
     ("branch_name", "kompally 500014", True), ("branch_name", "Kompaily - 500014", False),
-    ("amount_figures", "22,67,000/-", True), ("amount_figures", "22/-", False), ("amount_figures", "", False),
-    ("amount_words", "Twenty Two Lakh Sixty Seven Thousand", True), ("amount_words", "Twenty Two Lakh Sixty Thousand", False),
+    ("amount_figures", "18,25,000/-", True), ("amount_figures", "18/-", False), ("amount_figures", "", False),
+    ("amount_words", "Eighteen Lakh Twenty Five Thousand", True), ("amount_words", "Eighteen Lakh Twenty Thousand", False),
     ("ifsc_code", "UTIB0000425", True), ("ifsc_code", "UTIB0000428", False),
     ("date", "2026-07-21", True), ("date", "2026-04-21", False), ("account_number", "", False),
 ])
@@ -31,8 +31,8 @@ def _out(values, status="ok", conf=0.9):
 def test_summary_counts_silent_errors_and_review_routing():
     good = _out({"bank_name": "Axis Bank", "branch_name": "Kompally - 500014", "ifsc_code": "UTIB0000425", "cheque_number": "123456",
                  "micr_code": "110000123", "account_number": "700123456789098", "date": "2026-07-21",
-                 "payee_name": "Meera Kulkarni", "amount_figures": "22,67,000/-",
-                 "amount_words": "Twenty-Two Lakh Sixty-Seven Thousand Only"})
+                 "payee_name": "Meera Kulkarni", "amount_figures": "18,25,000/-",
+                 "amount_words": "Eighteen Lakh Twenty-Five Thousand Only"})
     bad = _out({k: f["value"] for k, f in good["fields"].items()})
     bad["fields"]["payee_name"]["value"] = "Meera Kulkarn"                      # wrong and marked ok → silent error
     bad["fields"]["date"].update(value="2026-04-21", status="review")         # wrong but flagged

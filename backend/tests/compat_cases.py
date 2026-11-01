@@ -29,7 +29,7 @@ def signature_pairs():
     return {"identical": (a, a), "shifted": (shifted, a), "blurred": (blurred, a), "different": (b, a)}
 
 
-def micr_cheque(text: str = "123456 500211012 426160 31") -> np.ndarray:
+def micr_cheque(text: str = "123456 999888777 135790 31") -> np.ndarray:
     """Render a cheque-sized white page whose MICR band is drawn from the stored glyph templates."""
     model = MicrModel.load(MODELS / "micr_e13b.npz")
     page = np.full((476, 1024, 3), 250, np.uint8)

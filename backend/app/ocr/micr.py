@@ -12,6 +12,7 @@ therefore learned only from the TRAIN split, using the filename digits as labels
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,7 @@ import numpy as np
 
 GLYPH_H, GLYPH_W = 24, 20
 NORM_WIDTH = 1024
+MIX_SEED = 20261101          # fixed, so retraining on the same cheques gives the same file (see MicrModel.mixed)
 
 
 @dataclass
@@ -117,6 +119,17 @@ class MicrModel:
         k = int(np.argmax(sims))
         return self.labels[k], float(sims[k])
 
+    def mixed(self, seed: int = MIX_SEED) -> "MicrModel":
+        """The same templates in a fixed pseudo-random order.
+
+        Templates are learned cheque by cheque, six digits at a time, and the labels of the first MICR group are the
+        cheque number, which in this dataset is the file name. Stored in reading order, the label list would spell out
+        the training cheques' numbers one after the other. The order does not matter to the matching (the best
+        template wins wherever it is stored), so it is mixed before the model is saved or shared."""
+        order = np.random.default_rng(seed).permutation(len(self.labels))
+        meta = {**self.meta, "order": "mixed"}
+        return MicrModel(self.samples[order], [self.labels[i] for i in order], meta)
+
     def save(self, path: Path) -> None:
         from ..services import atomic          # a crash while saving must not leave a truncated model behind
         with atomic.open_for_write(path) as f:
@@ -169,19 +182,20 @@ def read_micr(img: np.ndarray, model: MicrModel | None) -> dict:
 
 def train_from_dataset(items: list[dict]) -> tuple[MicrModel, dict]:
     """items: [{path, filename}] from the TRAIN split only."""
-    samples, labels, used, skipped = [], [], 0, []
+    samples, labels, used = [], [], 0
+    skipped: Counter = Counter()                  # reasons and counts only: the file names are the cheque numbers
     for it in items:
         stem = Path(it["filename"]).stem
         if not (stem.isdigit() and len(stem) == 6):
-            skipped.append({"file": it["filename"], "reason": "filename is not a 6-digit cheque number"})
+            skipped["filename is not a 6-digit cheque number"] += 1
             continue
         img = cv2.imread(str(it["path"]), cv2.IMREAD_COLOR)
         if img is None:
-            skipped.append({"file": it["filename"], "reason": "unreadable"})
+            skipped["unreadable"] += 1
             continue
         groups = group_glyphs(*segment(img))
         if not groups or len(groups[0]) != 6:
-            skipped.append({"file": it["filename"], "reason": f"first MICR group has {len(groups[0]) if groups else 0} glyphs"})
+            skipped[f"first MICR group has {len(groups[0]) if groups else 0} glyphs"] += 1
             continue
         for g, ch in zip(groups[0], stem):
             samples.append(g.img)
@@ -190,6 +204,6 @@ def train_from_dataset(items: list[dict]) -> tuple[MicrModel, dict]:
     if not samples:
         raise RuntimeError("No usable training glyphs found.")
     counts = {d: labels.count(d) for d in sorted(set(labels))}
-    meta = {"train_cheques_used": used, "skipped": skipped, "glyphs": len(labels), "per_digit": counts,
+    meta = {"train_cheques_used": used, "skipped": dict(skipped), "glyphs": len(labels), "per_digit": counts,
             "missing_digits": [d for d in "0123456789" if d not in counts]}
-    return MicrModel(np.stack(samples), labels, meta), meta
+    return MicrModel(np.stack(samples), labels, meta).mixed(), meta

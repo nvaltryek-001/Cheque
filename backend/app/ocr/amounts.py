@@ -1,4 +1,4 @@
-"""Indian-system amount parsing: '23,50,000/-' <-> 'Twenty Three Lakh Fifty Thousand'."""
+"""Indian-system amount parsing: '12,34,567/-' <-> 'Twelve Lakh Thirty Four Thousand Five Hundred Sixty Seven'."""
 from __future__ import annotations
 
 import re
