@@ -348,6 +348,37 @@ def test_sigterm_also_works_when_the_server_is_pid_1_like_in_a_container(tmp_pat
         outer.stdout.close()
 
 
+def test_a_failing_stdout_cannot_prevent_the_stop_or_the_watchdog(tmp_path):
+    """Found by repeating the test below under CPU load: SIGTERM that lands while the main thread is inside print() made the
+    handler's own print raise 'reentrant call' before the watchdog started, and the process then waited for its stuck
+    thread forever. Whatever stdout does, the process must still leave within the grace period."""
+    script = textwrap.dedent(f"""
+        import os, sys, threading, time
+        sys.path.insert(0, {str(BACKEND)!r})
+        from run import install_stop_handler
+        class Broken:
+            def write(self, *_): raise RuntimeError("reentrant call")
+            def flush(self): raise BrokenPipeError("log reader is gone")
+        install_stop_handler(grace_seconds=1)
+        threading.Thread(target=lambda: time.sleep(120)).start()     # a non-daemon thread that never ends
+        sys.stdout = Broken()
+        os.write(1, b"ready\\n")
+        while True:
+            time.sleep(0.1)
+    """)
+    proc = subprocess.Popen([sys.executable, "-I", "-c", script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        assert proc.stdout.readline().strip() == b"ready"
+        t0 = time.time()
+        proc.send_signal(signal.SIGTERM)
+        assert proc.wait(timeout=15) == 0
+        assert time.time() - t0 < 10
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+
+
 def test_the_watchdog_ends_a_shutdown_that_would_otherwise_hang(tmp_path):
     """A request that never finishes must not turn a clean stop into a kill: after the grace period the process leaves."""
     script = textwrap.dedent(f"""
@@ -371,3 +402,26 @@ def test_the_watchdog_ends_a_shutdown_that_would_otherwise_hang(tmp_path):
         if proc.poll() is None:
             proc.kill()
         proc.stdout.close()
+
+
+def test_waitress_leaves_forwarded_headers_to_the_application(monkeypatch):
+    """Found by the container check on GitHub: Waitress 3 clears X-Forwarded-* unless told otherwise, which behind one
+    proxy (Render) made every client look like the proxy. Waitress is not installable in every environment, so this checks
+    the call; the container step 'Behind one reverse proxy' checks the behaviour."""
+    import types
+    import run
+    seen = {}
+    fake = types.ModuleType("waitress")
+    fake.serve = lambda app, **kw: seen.update(kw)
+    monkeypatch.setitem(sys.modules, "waitress", fake)
+    monkeypatch.setattr(sys, "argv", ["run.py", "--prod", "--port", "0"])
+    monkeypatch.setattr("app.create_app", lambda *a, **k: object())
+    monkeypatch.setattr("app.services.lifecycle.on_process_start", lambda app: None)
+    monkeypatch.setattr(run, "install_stop_handler", lambda *a, **k: None)
+    old_umask = os.umask(0o022)                 # main() sets a private umask; keep it from leaking into other tests
+    try:
+        run.main()
+    finally:
+        os.umask(old_umask)
+    assert seen.get("clear_untrusted_proxy_headers") is False
+    assert "trusted_proxy" not in seen          # whom to trust stays a single setting: CV_PROXY_HOPS

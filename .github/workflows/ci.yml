@@ -216,6 +216,15 @@ jobs:
             -e CV_ADMIN_PASSWORD=Ci-pass-12345 chequeverify
           for i in $(seq 1 45); do curl -fs http://127.0.0.1:8003/api/health >/dev/null && break; sleep 2; done
           docker exec cvr python tests/smoke_live.py http://127.0.0.1:8003 Ci-pass-12345
+      - name: Explain failures (written as annotations, so the reasons can be read without opening the job log)
+        if: failure()
+        run: |
+          emit() { printf '::error title=%s::%s\n' "$1" "$(printf '%s' "$2" | head -c 5000 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"; }
+          emit "containers" "$(docker ps -a --format '{{.Names}}: {{.Status}}' 2>&1)"
+          emit "cvr (read-only) logs" "$(docker logs cvr 2>&1 | tail -n 40)"
+          emit "cvp (proxy) logs" "$(docker logs cvp 2>&1 | tail -n 25)"
+          emit "cvp HSTS probe" "$(curl -si -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8001/api/health 2>&1 | head -n 14)"
+          emit "cvr smoke probe" "$(docker exec cvr python tests/smoke_live.py http://127.0.0.1:8003 Ci-pass-12345 2>&1 | tail -n 25)"
       - name: Container logs
         if: always()
         run: for c in cv cvp cvm cvr; do echo "=== $c"; docker logs $c 2>&1 | tail -n 80 || true; done

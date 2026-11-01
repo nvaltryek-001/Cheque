@@ -45,11 +45,20 @@ def install_stop_handler(grace_seconds: float | None = None) -> None:
 
     def stop(signum, _frame):
         signal.signal(signum, signal.SIG_DFL)                  # a second signal is not swallowed
-        print(f"received signal {signum}: shutting down", flush=True)
+        # Nothing below may prevent the watchdog from starting or the exit from happening. The signal can arrive while
+        # the main thread is inside print() (RuntimeError: reentrant call) or after the log reader has gone away, so
+        # the watchdog starts first and the message is written with os.write, whose failure is ignored.
         if grace_seconds > 0:
-            watchdog = threading.Timer(grace_seconds, os._exit, args=(0,))
-            watchdog.daemon = True
-            watchdog.start()
+            try:
+                watchdog = threading.Timer(grace_seconds, os._exit, args=(0,))
+                watchdog.daemon = True
+                watchdog.start()
+            except Exception:                                  # cannot start a thread: still stop promptly
+                pass
+        try:
+            os.write(1, f"received signal {signum}: shutting down\n".encode())
+        except OSError:
+            pass
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, stop)
@@ -78,7 +87,11 @@ def main() -> None:
             app.run(host=host, port=args.port, debug=False, threaded=True)
             return
         print(f"ChequeVerify AI (production) on http://{host}:{args.port}")
-        serve(app, host=host, port=args.port, threads=8)
+        # Waitress 3 deletes X-Forwarded-For / -Proto before the application sees them unless it is told which proxy to
+        # trust. The application already decides that itself (CV_PROXY_HOPS -> ProxyFix; 0 = the headers are ignored),
+        # so Waitress is told to leave them alone. Without this, behind Render's proxy every visitor shares the proxy's
+        # address (one sign-in throttle for everyone, wrong audit-log addresses) and HSTS is never sent.
+        serve(app, host=host, port=args.port, threads=8, clear_untrusted_proxy_headers=False)
     else:
         app.run(host=args.host, port=args.port, debug=False, threaded=True)
 
