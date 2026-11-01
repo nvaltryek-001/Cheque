@@ -36,12 +36,23 @@ the Windows firewall port to reach it from other PCs on the LAN.
 |---|---|---|
 | `CV_ADMIN_PASSWORD` | random, printed once | set it (first start only); it must satisfy the password policy or the server refuses to start |
 | `CV_MIN_PASSWORD_LENGTH` | 8 | 12 (set in `render.yaml`) |
+| `CV_EMAIL_DELIVERY` | empty (email sign-in off) | `smtp` once the `CV_SMTP_*` values below are set. **Never `log` on a hosted copy** |
+| `CV_SMTP_HOST`, `CV_SMTP_PORT`, `CV_SMTP_SECURITY`, `CV_SMTP_USER`, `CV_SMTP_FROM` | -, 587, `starttls`, -, - | your mail service's values; add them in the Render dashboard → Environment (not in `render.yaml`) |
+| `CV_SMTP_PASSWORD` | - | a secret: type it in the dashboard only, never in a file, a commit or a chat |
+| `CV_EMAIL_DOMAINS` | `saividya.ac.in` | keep, or list the domains that may sign in (exact match) |
+| `CV_EMAIL_DEFAULT_ROLE` | `pending` | keep: new people wait for an administrator's approval |
+| `CV_ADMIN_EMAILS` | empty | the address(es) of the first email administrator(s); otherwise use the `admin` password account to approve people |
+| `CV_PASSWORD_LOGIN` | `1` | `0` only after an email administrator exists and mail delivery is proven |
 | `CV_PROXY_HOPS` | 0 | 1 behind Render / one load balancer; 0 when the app is reached directly |
 | `CV_RATE_LIMIT_PER_MIN` | 120 | keep; 0 switches the per-user limit off |
 | `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_IP_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` | 5, 20, 300 | keep |
 | `CV_MAX_IMAGE_PIXELS` | 25000000 | keep (a 300 dpi A4 scan is ≈ 8.7 million) |
 | `CV_HSTS_MAX_AGE` | 31536000 | keep once HTTPS works; 0 while testing |
 | `CV_CORS_ORIGINS` | localhost dev origins (image: empty) | leave empty for the bundled UI |
+
+Email sign-in (`docs/AUTHENTICATION.md`) needs a mail service you control; without it the sign-in screen offers only the
+administrator form. Check it by signing in with your own address after the first deploy and keep the password account
+available until delivery works. Choosing a mail service (and any cost or sender verification it needs) is yours to approve.
 
 Locked out after too many wrong passwords? Wait for the window to pass or run `python manage.py unlock-logins`
 inside the container (`docker exec <name> python manage.py unlock-logins`).

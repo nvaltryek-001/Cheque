@@ -2,7 +2,8 @@
 
     python tests/smoke_live.py http://127.0.0.1:8000 <admin-password>
 
-Uses synthetic images only. Exercises: health, login, create operator, create signer, enroll a
+Uses synthetic images only. Exercises: health, which sign-in methods are offered and how the email sign-in
+endpoints answer without a mailbox to read, login, create operator, create signer, enroll a
 specimen, upload a cheque (OCR + signature detection), verify from the cheque, verify an edited copy
 (must be MISMATCH), manual review, history, CSV + PDF report, persistence of the record, and the
 enrollment workflow: signing sessions, batch enrollment, reference-set readiness and the cap on MATCH."""
@@ -76,6 +77,17 @@ s, b = req("GET", "/api/health")
 check("health", s == 200 and b["data"]["status"] == "ok", b)
 s, b = req("GET", "/")
 check("frontend served", s == 200 and b"<div id=\"root\">" in b)
+s, b = req("GET", "/api/auth/config")
+check("the sign-in methods are public", s == 200 and {"email_signin", "password_signin", "email_domains"} <= set(b["data"]), b)
+offered = b["data"]
+if not offered["email_signin"]:
+    s, b = req("POST", "/api/auth/email/request", json_body={"email": "first.last@saividya.ac.in"})
+    check("email sign-in is refused while no mail delivery is configured",
+          s == 503 and b["error"]["code"] == "email_signin_unavailable", b)
+s, b = req("POST", "/api/auth/email/verify", json_body={"email": "first.last@saividya.ac.in", "code": "00000000"})
+check("a code that was never issued signs nobody in", s in (401, 503) and "token" not in json.dumps(b), b)
+s, b = req("POST", "/api/auth/email/request", json_body={"email": "someone@example.com"})
+check("an address from another domain is refused", s in (400, 503), b)
 s, b = req("POST", "/api/auth/login", json_body={"username": "admin", "password": ADMIN_PW})
 check("admin login", s == 200, b)
 A = b["data"]["token"]

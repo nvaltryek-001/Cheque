@@ -19,6 +19,13 @@ services:
         value: "1"
       - key: CV_MIN_PASSWORD_LENGTH   # also applies to the first admin password you type in the dashboard
         value: "12"
+      # Sign-in by institutional email (docs/AUTHENTICATION.md). It stays off, and only the administrator sign-in is
+      # offered, until a mail server is configured. Add these in the dashboard (Environment) once you have chosen a
+      # mail service - a Blueprint only prompts for sync:false values when it is first created and ignores keys added
+      # later, and never put their values in this file:
+      #   CV_SMTP_HOST, CV_SMTP_USER, CV_SMTP_FROM, CV_SMTP_PASSWORD (secret), optional CV_ADMIN_EMAILS
+      - key: CV_EMAIL_DELIVERY
+        value: smtp
     disk:
       name: chequeverify-data
       mountPath: /data

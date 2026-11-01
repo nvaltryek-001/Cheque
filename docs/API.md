@@ -7,19 +7,26 @@ Base URL: `http://127.0.0.1:5000`. All responses are JSON envelopes:
 { "ok": false, "error": { "code": "validation_error", "message": "…", "details": { ... } } }
 ```
 
-Authentication: `POST /api/auth/login` returns a token; send it as `Authorization: Bearer <token>`.
+Authentication: `POST /api/auth/login` (username + password, "administrator sign-in") or the two-step email sign-in
+(`POST /api/auth/email/request`, then `POST /api/auth/email/verify` with the code that was mailed) returns a token;
+send it as `Authorization: Bearer <token>`. See `docs/AUTHENTICATION.md`.
 Roles: **admin** (everything), **operator** (process, verify, review), **auditor** (read-only + audit log).
+A person who signed in by email for the first time is **pending**: `GET /api/auth/me` shows `role: "pending"` and every
+other endpoint answers `403 approval_pending` until an administrator gives a role.
 Image endpoints also require the token – the frontend fetches them as blobs.
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
 | GET | `/api/health` | public | Liveness (status + version only) |
-| POST | `/api/auth/login` | public | `{username, password}` → `{token, user}`; 5 failures lock the account for 5 min |
-| POST | `/api/auth/logout` | any | Revokes all of the user's tokens |
-| GET | `/api/auth/me` | any | Current user |
-| POST | `/api/auth/change-password` | any | `{current_password, new_password}` → new token |
+| GET | `/api/auth/config` | public | Which sign-in methods this server offers: `{email_signin, email_domain, email_domains, password_signin, code_length, code_ttl_seconds, resend_seconds}` |
+| POST | `/api/auth/login` | public | `{username, password}` → `{token, user}`; 5 failures block the client for 5 min. `403 password_signin_disabled` when `CV_PASSWORD_LOGIN=0` |
+| POST | `/api/auth/email/request` | public | `{email}` → `{sent, email, expires_in, resend_after, code_length}`; mails an 8-digit code. `400 invalid_email` (another domain or bad syntax), `429 resend_too_soon` / `too_many_requests` (with `details.retry_after`), `503 email_signin_unavailable` (no mail delivery configured) or `email_delivery_failed` |
+| POST | `/api/auth/email/verify` | public | `{email, code}` → `{token, user}` (same answer as the password sign-in); creates the account on first use. `401 invalid_code` (`details.attempts_left`), `429 too_many_attempts`, `403 account_disabled` |
+| POST | `/api/auth/logout` | any, also pending | Revokes all of the user's tokens |
+| GET | `/api/auth/me` | any, also pending | Current user (`email`, `role`; `role` is `pending` while awaiting approval) |
+| POST | `/api/auth/change-password` | any (accounts with a password) | `{current_password, new_password}` → new token |
 | GET / POST | `/api/users` | admin | List / create users |
-| PATCH / DELETE | `/api/users/{id}` | admin | Update role, name, active flag, password / delete |
+| PATCH / DELETE | `/api/users/{id}` | admin | Update role (`admin`, `operator`, `auditor`; giving a role approves a pending account, `pending` withdraws access), name, active flag, password (`400` for email accounts, which have none) / delete |
 | **Cheques** ||||
 | POST | `/api/cheques` | admin, operator | multipart `file` → OCR, validation, signature detection. Returns the full record |
 | POST | `/api/cheques/batch` | admin, operator | multipart `files` (≤ 20) |
@@ -72,7 +79,9 @@ Image endpoints also require the token – the frontend fetches them as blobs.
 | GET | `/api/audit-log` | admin, auditor | Audit trail |
 | GET | `/api/system/status` | any | Versions and dataset availability |
 
-Common error codes: `auth_required` 401, `invalid_token` 401, `forbidden` 403, `not_found` 404,
+Common error codes: `auth_required` 401, `invalid_token` 401, `forbidden` 403, `approval_pending` 403 (signed in, role not yet given),
+`invalid_email` 400, `invalid_code` 401, `email_signin_unavailable` 503, `email_delivery_failed` 503, `resend_too_soon` 429,
+`account_disabled` 403, `password_signin_disabled` 403, `not_found` 404,
 `validation_error` 400, `weak_password` 400, `unsupported_type` 415, `file_too_large` 413 (upload size),
 `image_too_large` 413 (decoded pixel count, checked from the header before decoding), `corrupted_image` 422,
 `invalid_signature` 422, `poor_quality` 422, `duplicate_specimen` 409, `duplicate_other_signer` 409,

@@ -159,6 +159,21 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_login_attempts ON login_attempts(ip, username, at);
+
+-- One-time sign-in codes sent by email (services/email_login.py). Only a keyed hash of the code is stored;
+-- a row is dead once it is consumed, expired or has used up its attempts.
+CREATE TABLE IF NOT EXISTS login_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    ip TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    consumed_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_login_codes_email ON login_codes(email, created_at);
+CREATE INDEX IF NOT EXISTS idx_login_codes_ip ON login_codes(ip, created_at);
 """
 
 
@@ -207,6 +222,10 @@ ADDED_COLUMNS = [
     ("specimens", "session_id", "INTEGER REFERENCES enrollment_sessions(id) ON DELETE SET NULL"),
     ("specimens", "source_ref", "TEXT NOT NULL DEFAULT ''"),
     ("specimens", "origin", "TEXT NOT NULL DEFAULT 'upload'"),
+    # sign-in by institutional email: the address (NULL for accounts that only use a password) and the
+    # approval flag. 1 = signed in successfully but no administrator has given the account a role yet.
+    ("users", "email", "TEXT"),
+    ("users", "pending_approval", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -222,6 +241,7 @@ def migrate(conn: sqlite3.Connection) -> list[str]:
                 conn.execute("UPDATE specimens SET origin='dataset_import' WHERE signer_id IN "
                              "(SELECT id FROM signers WHERE source LIKE 'dataset:%')")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_specimens_session ON specimens(session_id)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email COLLATE NOCASE) WHERE email IS NOT NULL")
     return done
 
 

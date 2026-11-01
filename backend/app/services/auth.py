@@ -4,6 +4,8 @@ Roles
   admin    – everything, including user management and signature enrollment
   operator – process cheques, run verifications, review results
   auditor  – read-only access to records, reports and audit log
+  pending  – (shown role, stored as users.pending_approval) signed in by email but not yet approved: may only see
+             who they are and sign out; every other endpoint answers 403 until an administrator gives a role
 Tokens are signed (itsdangerous) and bound to the user's token_version, so
 logout / password change / deactivation invalidates every issued token.
 """
@@ -23,6 +25,7 @@ from ..db import execute, now_iso, query
 from . import audit, throttle
 
 ROLES = ("admin", "operator", "auditor")
+ASSIGNABLE_ROLES = ROLES + ("pending",)   # what an administrator may set on an existing account
 MIN_PASSWORD_LENGTH = 8   # default; the effective value is current_app.config["MIN_PASSWORD_LENGTH"]
 
 
@@ -76,8 +79,8 @@ def issue_token(user) -> str:
 
 def public_user(row) -> dict:
     return {
-        "id": row["id"], "username": row["username"], "full_name": row["full_name"],
-        "role": row["role"], "is_active": bool(row["is_active"]),
+        "id": row["id"], "username": row["username"], "email": row["email"], "full_name": row["full_name"],
+        "role": "pending" if row["pending_approval"] else row["role"], "is_active": bool(row["is_active"]),
         "created_at": row["created_at"], "last_login_at": row["last_login_at"],
     }
 
@@ -130,12 +133,16 @@ def load_user_from_request():
     return user
 
 
-def login_required(*roles: str):
-    """Decorator. With no roles: any authenticated user. Otherwise one of the roles."""
+def login_required(*roles: str, allow_pending: bool = False):
+    """Decorator. With no roles: any approved, authenticated user. Otherwise one of the roles. An account that
+    signed in by email but has not been approved yet is refused everywhere except where allow_pending is set
+    (who-am-I and sign-out)."""
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             user = load_user_from_request()
+            if user["pending_approval"] and not allow_pending:
+                raise ApiError(403, "approval_pending", "Your account is waiting for an administrator to approve it.")
             if roles and user["role"] not in roles:
                 raise ApiError(403, "forbidden", "Your role is not allowed to perform this action.")
             g.user = user

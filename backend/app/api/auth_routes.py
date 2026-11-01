@@ -1,29 +1,58 @@
 """/api/auth and /api/users"""
 from __future__ import annotations
 
-from flask import Blueprint, g
+from flask import Blueprint, current_app, g
 
 from ..db import execute, now_iso, query
-from ..services import audit
-from ..services.auth import (ROLES, authenticate, hash_password, issue_token, login_required, public_user,
-                             validate_password)
+from ..services import audit, email_login
+from ..services.auth import (ASSIGNABLE_ROLES, ROLES, authenticate, hash_password, issue_token, login_required,
+                             public_user, validate_password)
 from .common import ApiError, json_body, ok, require_fields
 
 bp = Blueprint("auth", __name__)
 
 
+@bp.get("/api/auth/config")
+def auth_config():
+    """Public: which sign-in methods this server offers (the login screen needs it before anyone is signed in)."""
+    return ok(email_login.public_config())
+
+
 @bp.post("/api/auth/login")
 def login():
+    """Username + password ("administrator sign-in"). Switched off with CV_PASSWORD_LOGIN=0."""
+    if not current_app.config.get("PASSWORD_LOGIN", True):
+        raise ApiError(403, "password_signin_disabled",
+                       "Username and password sign-in is switched off on this server. Sign in with your institutional email.")
     data = json_body()
     require_fields(data, "username", "password")
     user = authenticate(str(data["username"]).strip(), str(data["password"]))
     g.user = user
-    audit.record("auth.login", "user", user["id"])
+    audit.record("auth.login", "user", user["id"], {"method": "password"})
+    return ok({"token": issue_token(user), "user": public_user(user)})
+
+
+@bp.post("/api/auth/email/request")
+def email_request():
+    """Step 1 of the passwordless sign-in: mail a one-time code to an institutional address."""
+    data = json_body()
+    require_fields(data, "email")
+    return ok(email_login.request_code(data["email"]))
+
+
+@bp.post("/api/auth/email/verify")
+def email_verify():
+    """Step 2: the code proves the mailbox; the account is created on first use."""
+    data = json_body()
+    require_fields(data, "email", "code")
+    user = email_login.verify_code(data["email"], data["code"])
+    g.user = user
+    audit.record("auth.login", "user", user["id"], {"method": "email"})
     return ok({"token": issue_token(user), "user": public_user(user)})
 
 
 @bp.post("/api/auth/logout")
-@login_required()
+@login_required(allow_pending=True)
 def logout():
     # bumping the token version revokes every token issued to this user
     execute("UPDATE users SET token_version = token_version + 1 WHERE id=?", (g.user["id"],))
@@ -32,7 +61,7 @@ def logout():
 
 
 @bp.get("/api/auth/me")
-@login_required()
+@login_required(allow_pending=True)
 def me():
     return ok(public_user(g.user))
 
@@ -100,17 +129,24 @@ def update_user(uid: int):
     if "full_name" in data:
         sets.append("full_name=?"); params.append(str(data["full_name"])[:120]); changes["full_name"] = True
     if "role" in data:
-        if data["role"] not in ROLES:
+        if data["role"] not in ASSIGNABLE_ROLES:
             raise ApiError(400, "validation_error", "Invalid role.")
         if uid == g.user["id"] and data["role"] != "admin":
             raise ApiError(400, "validation_error", "You cannot remove your own admin role.")
-        sets.append("role=?"); params.append(data["role"]); changes["role"] = data["role"]
+        if data["role"] == "pending":      # withdraw access without deleting the account; the stored role is kept
+            sets.append("pending_approval=1")
+        else:                               # giving a role approves the account
+            sets.append("role=?"); params.append(data["role"]); sets.append("pending_approval=0")
+        changes["role"] = data["role"]
     if "is_active" in data:
         if uid == g.user["id"] and not data["is_active"]:
             raise ApiError(400, "validation_error", "You cannot deactivate your own account.")
         sets.append("is_active=?"); params.append(1 if data["is_active"] else 0)
         sets.append("token_version=token_version+1"); changes["is_active"] = bool(data["is_active"])
     if data.get("password"):
+        if user["email"]:                   # signs in with a mailed code; a password would be a second, weaker way in
+            raise ApiError(400, "validation_error",
+                           "This account signs in with its institutional email and has no password to reset.")
         validate_password(str(data["password"]), user["username"])
         sets.append("password_hash=?"); params.append(hash_password(str(data["password"])))
         sets.append("token_version=token_version+1"); changes["password_reset"] = True

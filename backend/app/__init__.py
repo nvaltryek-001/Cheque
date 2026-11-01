@@ -56,6 +56,9 @@ def create_app(overrides: dict | None = None) -> Flask:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    from .services import email_login
+    for note in email_login.startup_notes(app.config):
+        logging.getLogger("chequeverify.email_login").warning(note)
     init_db(str(app.config["DATABASE"]))
 
     from .services.auth import bootstrap_admin

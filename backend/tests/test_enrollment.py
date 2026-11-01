@@ -89,7 +89,8 @@ def test_migration_upgrades_an_older_database_and_is_idempotent(tmp_path):
     conn.commit()
     conn.close()
     conn = dbmod.connect(str(path))
-    assert dbmod.migrate(conn) == ["specimens.session_id", "specimens.source_ref", "specimens.origin"]
+    assert dbmod.migrate(conn) == ["specimens.session_id", "specimens.source_ref", "specimens.origin",
+                                   "users.email", "users.pending_approval"]     # the last two: sign-in by email
     conn.commit()
     assert dbmod.migrate(conn) == []
     rows = {r["id"]: r for r in conn.execute("SELECT * FROM specimens")}

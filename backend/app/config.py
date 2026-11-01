@@ -57,6 +57,32 @@ class Config:
     # Strict-Transport-Security max-age, sent only on HTTPS responses (0 = never send)
     HSTS_MAX_AGE = _int("CV_HSTS_MAX_AGE", 365 * 24 * 3600)
 
+    # --- sign-in by institutional email (passwordless; see docs/AUTHENTICATION.md) ------------
+    # Anyone with a mailbox in one of these domains may ask for a code; the emailed one-time code proves they
+    # control the mailbox. Matching is exact: sub-domains are not included. Comma separated.
+    EMAIL_DOMAINS = [d.strip().lower() for d in os.environ.get("CV_EMAIL_DOMAINS", "saividya.ac.in").split(",") if d.strip()]
+    # How the code reaches the person. "smtp" = real mail (CV_SMTP_*). "log" = DEVELOPMENT ONLY: the code is
+    # written to the server log, so anyone who can read the log can sign in. "" = email sign-in is switched off.
+    EMAIL_DELIVERY = os.environ.get("CV_EMAIL_DELIVERY", "").strip().lower()
+    SMTP_HOST = os.environ.get("CV_SMTP_HOST", "").strip()
+    SMTP_PORT = _int("CV_SMTP_PORT", 587)
+    SMTP_SECURITY = os.environ.get("CV_SMTP_SECURITY", "starttls").strip().lower()   # starttls | ssl | none (loopback only)
+    SMTP_USER = os.environ.get("CV_SMTP_USER", "").strip()                           # the password is read from CV_SMTP_PASSWORD when sending
+    SMTP_FROM = os.environ.get("CV_SMTP_FROM", "").strip()
+    EMAIL_CODE_TTL_SECONDS = _int("CV_EMAIL_CODE_TTL", 600)
+    EMAIL_CODE_MAX_ATTEMPTS = _int("CV_EMAIL_CODE_ATTEMPTS", 5)          # wrong guesses before a code is burned
+    EMAIL_REQUEST_WINDOW_SECONDS = _int("CV_EMAIL_REQUEST_WINDOW", 900)
+    EMAIL_REQUESTS_PER_ADDRESS = _int("CV_EMAIL_REQUESTS_PER_ADDRESS", 5)   # codes per address per window
+    EMAIL_REQUESTS_PER_IP = _int("CV_EMAIL_REQUESTS_PER_IP", 20)            # codes per client IP per window
+    EMAIL_RESEND_SECONDS = _int("CV_EMAIL_RESEND_SECONDS", 30)               # minimum gap between two codes for one address
+    # What a first-time email sign-in becomes: "pending" (signed in, sees nothing until an administrator
+    # approves), or "auditor" / "operator" (immediately active with that role). Never "admin".
+    EMAIL_DEFAULT_ROLE = os.environ.get("CV_EMAIL_DEFAULT_ROLE", "pending").strip().lower()
+    # Addresses that become administrators when they sign in (after proving the mailbox). Not a list of who may sign in.
+    ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get("CV_ADMIN_EMAILS", "").split(",") if e.strip()]
+    # Username + password sign-in ("Administrator sign-in"). Switch off once email administrators exist.
+    PASSWORD_LOGIN = os.environ.get("CV_PASSWORD_LOGIN", "1").strip().lower() not in ("0", "false", "no", "off")
+
     # --- OCR ---------------------------------------------------------------
     OCR_ENGINE = os.environ.get("CV_OCR_ENGINE", "auto")  # auto | paddle | tesseract | none
     TESSERACT_CMD = os.environ.get("CV_TESSERACT_CMD", "")
