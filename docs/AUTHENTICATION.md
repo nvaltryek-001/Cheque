@@ -123,7 +123,7 @@ CV_SMTP_PASSWORD=<set as a secret in the hosting dashboard>
 | Only a keyed hash (HMAC-SHA-256 with the server secret) is stored; the code never appears in a response, the audit log or any log except `log` mode | fixed |
 | A code works once, then it is consumed. Asking for a new code retires the old one | fixed |
 | Lifetime of a code | `CV_EMAIL_CODE_TTL` (600 s) |
-| Wrong guesses before the code is burned | `CV_EMAIL_CODE_ATTEMPTS` (5) |
+| Wrong guesses before the code is burned (a guess is reserved with one atomic database update before the code is compared, so requests sent at the same moment cannot get more than this many comparisons) | `CV_EMAIL_CODE_ATTEMPTS` (5) |
 | Wrong codes also feed the sign-in throttle used for passwords (per client address and per mailbox) | `CV_LOGIN_MAX_ATTEMPTS`, `CV_LOGIN_LOCK_SECONDS` |
 | Minimum time between two codes for one address | `CV_EMAIL_RESEND_SECONDS` (30 s) |
 | Codes per address per window | `CV_EMAIL_REQUESTS_PER_ADDRESS` (5 per `CV_EMAIL_REQUEST_WINDOW` = 900 s) |

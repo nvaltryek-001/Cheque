@@ -123,10 +123,12 @@ def request_code(raw_email) -> dict:
             raise ApiError(429, "too_many_requests", f"Too many codes requested. Try again in {wait} seconds.",
                            {"retry_after": wait})
     code = f"{secrets.randbelow(10 ** CODE_DIGITS):0{CODE_DIGITS}d}"
-    execute("UPDATE login_codes SET consumed_at=? WHERE email=? AND consumed_at IS NULL", (now, email))   # one live code
     ttl = int(cfg["EMAIL_CODE_TTL_SECONDS"])
     code_id = execute("INSERT INTO login_codes(email, code_hash, ip, created_at, expires_at) VALUES(?,?,?,?,?)",
                       (email, _digest(email, code), ip, now, now + ttl))
+    # One live code per address: every older code is retired after the new one exists, so the newest wins even when
+    # two requests arrive together and an older code can never come back to life.
+    execute("UPDATE login_codes SET consumed_at=? WHERE email=? AND consumed_at IS NULL AND id<?", (now, email, code_id))
     try:
         mailer.send_login_code(email, code)
     except mailer.DeliveryError:
@@ -164,17 +166,20 @@ def verify_code(raw_email, raw_code):
         execute("UPDATE login_codes SET consumed_at=? WHERE id=?", (now, row["id"]))
         _reject(email, key, "expired")
     max_attempts = int(current_app.config["EMAIL_CODE_MAX_ATTEMPTS"])
-    used = row["attempts"] + 1
     db = get_db()
-    db.execute("UPDATE login_codes SET attempts=? WHERE id=?", (used, row["id"]))
+    # Reserve one guess before looking at the code. SQLite applies a conditional UPDATE atomically, so however many
+    # requests arrive at the same moment, at most `max_attempts` of them are ever allowed to compare a code.
+    reserved = db.execute("UPDATE login_codes SET attempts = attempts + 1 "
+                          "WHERE id=? AND consumed_at IS NULL AND attempts < ?", (row["id"], max_attempts)).rowcount
     db.commit()
-    if used > max_attempts:
-        execute("UPDATE login_codes SET consumed_at=? WHERE id=?", (now, row["id"]))
+    if reserved != 1:                           # every guess is used (or the code was just consumed by another request)
+        execute("UPDATE login_codes SET consumed_at=? WHERE id=? AND consumed_at IS NULL", (now, row["id"]))
         _reject(email, key, "too_many_attempts")
+    used = query("SELECT attempts FROM login_codes WHERE id=?", (row["id"],), one=True)["attempts"]
     well_formed = len(given) == CODE_DIGITS and given.isdigit()
     if not (well_formed and hmac.compare_digest(row["code_hash"], _digest(email, given))):
         if used >= max_attempts:
-            execute("UPDATE login_codes SET consumed_at=? WHERE id=?", (now, row["id"]))
+            execute("UPDATE login_codes SET consumed_at=? WHERE id=? AND consumed_at IS NULL", (now, row["id"]))
         _reject(email, key, "wrong_code", max(0, max_attempts - used))
     cur = db.execute("UPDATE login_codes SET consumed_at=? WHERE id=? AND consumed_at IS NULL", (now, row["id"]))
     db.commit()

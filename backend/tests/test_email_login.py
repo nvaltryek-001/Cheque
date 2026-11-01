@@ -224,6 +224,52 @@ def test_the_last_allowed_attempt_may_still_succeed(client, mail):
     assert client.post("/api/auth/email/verify", json={"email": ALICE, "code": right}).status_code == 200
 
 
+def test_parallel_guesses_cannot_exceed_the_attempt_limit(mail, monkeypatch):
+    """Many requests arriving at once must not each get a look at the code: how many guesses are ever compared is
+    fixed by CV_EMAIL_CODE_ATTEMPTS, whatever the timing."""
+    mail.config.update(LOGIN_MAX_ATTEMPTS=10_000, LOGIN_IP_MAX_ATTEMPTS=10_000)       # isolate the per-code limit
+    assert ask(mail.test_client()).status_code == 200
+    right = last_code(mail)
+    compared, real = [], email_login._digest
+    monkeypatch.setattr(email_login, "_digest", lambda email, code: (compared.append(code), real(email, code))[1])
+    guesses = [f"{n:08d}" for n in range(1, 61) if f"{n:08d}" != right]
+    gate, statuses = threading.Barrier(len(guesses)), []
+
+    def fire(code):
+        c = mail.test_client()
+        gate.wait()
+        statuses.append(c.post("/api/auth/email/verify", json={"email": ALICE, "code": code}).status_code)
+
+    threads = [threading.Thread(target=fire, args=(g,)) for g in guesses]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert set(statuses) == {401}                                                     # nobody in, no server error
+    assert len(compared) <= mail.config["EMAIL_CODE_MAX_ATTEMPTS"], len(compared)
+    assert mail.test_client().post("/api/auth/email/verify", json={"email": ALICE, "code": right}).status_code == 401
+
+
+def test_two_requests_that_overlap_leave_exactly_one_live_code(mail, monkeypatch):
+    """A second request that finishes in the middle of the first one must not leave two live codes behind: the newest
+    code wins and an older one can never come back to life after the newer one is used up."""
+    mail.config.update(EMAIL_REQUESTS_PER_ADDRESS=100, EMAIL_REQUESTS_PER_IP=100)
+    real, state = email_login._digest, {"started": False, "status": None}
+
+    def digest(email, code):
+        if not state["started"]:                        # the first request is half way: let a whole second one run
+            state["started"] = True
+            state["status"] = mail.test_client().post("/api/auth/email/request", json={"email": ALICE}).status_code
+        return real(email, code)
+
+    monkeypatch.setattr(email_login, "_digest", digest)
+    assert ask(mail.test_client()).status_code == 200 and state["status"] == 200
+    with mail.app_context():
+        from app.db import query
+        live = query("SELECT COUNT(*) c FROM login_codes WHERE email=? AND consumed_at IS NULL", (ALICE,), one=True)["c"]
+    assert live == 1, live
+
+
 @pytest.mark.parametrize("code", ["", "abc", "1234567", "123456789", "１２３４５６７８", "12345 678a", None, 12345678])
 def test_malformed_codes_are_refused_without_a_hint(client, mail, code):
     ask(client)
