@@ -5,8 +5,8 @@
 
 FROM node:20-alpine AS ui
 WORKDIR /ui
-COPY Frontend/package*.json ./
-RUN npm install --no-audit --no-fund
+COPY Frontend/package.json Frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY Frontend/ ./
 RUN npm run build
 

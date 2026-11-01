@@ -5,14 +5,17 @@ This report contains no cheque image, account number, payee name, password, key 
 
 ## 0. Where things stand
 
+*Update, evening of 2026-11-01:* since the figures in section 1 were worked out, the cheque values found in the current files were replaced (three commits), the Vite advisories were fixed, the frontend dependencies were pinned with a lock file, the Git history scan was corrected to cover all 34 revisions (see `SECURITY_AUDIT.md`), and a Free-plan blueprint replaced the paid one. The percentages in section 1 were **not recomputed** and stay as stated; the history exposure keeps Security at its previous level.
+
 * ChequeVerify AI is a **working pilot application**: sign-in, cheque upload and OCR, field review, signature enrollment and comparison, reports, and the
-  OCR dataset with a one-click *Process with OCR* for every sample cheque. It was tested as a whole: 586 backend tests, a real browser, and a real Docker
+  OCR dataset with a one-click *Process with OCR* for every sample cheque. It was tested as a whole: 609 backend tests, a real browser, and a real Docker
   container on GitHub.
-* **It is not deployed.** No Render service exists, because creating one needs the owner's Render account (and a paid plan with a disk). So there is **no public
-  address yet**. The steps are in section 10; they take about five minutes.
+* **It is not deployed.** No Render service exists, because creating one needs the owner's Render sign-in and the administrator password typed into Render's form (the owner chose the
+  **Free** plan: no payment, no disk, so data is erased whenever the instance sleeps). So there is **no public address yet**. The exact steps are in
+  `FINAL_DEPLOYMENT_REPORT.md`, section 2; they take about ten minutes.
 * It is **not validated for real cheque decisions**. OCR accuracy was measured on 20 cheques whose labels were written by the AI assistant (not by a person) and
   that the extraction rules were tuned on. Signature accuracy against real forgeries cannot be measured with the delivered data.
-* Two **High** findings are open (section 7). Neither stops a pilot that holds no real cheque data; the first must be decided before the repository is shared more widely.
+* One **High** finding is open (section 7): the Git history still holds real cheque values. It does not stop a pilot that holds no real cheque data, but it must be decided before the repository is shared more widely.
 * Departure from the written brief, stated plainly: its stop condition said not to push or deploy and to wait for a separate approval. The owner's later message
   asked to deploy directly, so the branch was pushed to GitHub (no merge, no change to `main`, no force-push, no history rewrite of anything already published) so that
   Render can build it. Deploying to Render itself was not done.
@@ -37,7 +40,7 @@ the nearest 5 %** so that no figure is more precise than the evidence. Nothing i
 ### Basis for each figure
 
 **Backend, 13 of 14.** Items: Flask start-up, API routing, authentication, one-time-code workflow, OCR processing, signature enrollment, signature verification, file uploads, input
-validation, database operations, result generation, reports, health endpoint, backup and restore. Twelve are verified in full (586 tests, the 32-step live workflow, the real container).
+validation, database operations, result generation, reports, health endpoint, backup and restore. Twelve are verified in full (609 tests, the 32-step live workflow, the real container).
 Two count half: one-time codes (tested end to end with log delivery and a local fake mail server, never with a real mailbox) and signature verification (works and is tested; its accuracy on
 real genuine and forged signatures is unmeasured).
 
@@ -74,7 +77,7 @@ proxy headers (with a simulated proxy), clean stop, 512 MB memory, read-only roo
 and domain, speed on the Starter plan, monitoring and alerts, scheduled backups.
 
 ## 2. Backend test totals
-Full suite, 2026-11-01, final code: **586 passed, 0 failed, 0 skipped** with the datasets; **579 passed, 0 failed, 7 skipped** without them (as on GitHub). Commands, per-area counts, skip reasons and the failures
+Full suite, 2026-11-01, final code: **609 passed, 0 failed, 0 skipped** with the datasets; **602 passed, 0 failed, 7 skipped** without them (as on GitHub). (586 / 579 when the figures below were worked out; 23 tests were added since, among them those for the live checker and the privacy of reports.) Commands, per-area counts, skip reasons and the failures
 found on the way: `PHASE6_REGRESSION_RESULTS.md`.
 
 ## 3. Frontend build result
@@ -94,8 +97,7 @@ Signatures: another signer accepted 0 of 14,280 pairs; edited copies accepted 2 
 `manage.py score-ocr` against the private labels, on the final code (69 s): **196 of 200 fields correct** (95 % confidence interval 95.0 to 99.2 %); 16 of 20 cheques with every field correct; 4 wrong values, all flagged for review or missing, **none marked "ok"**; 152 fields marked "ok", all correct; 44 correct values sent to review (every branch name goes to review, so no cheque is accepted without a person looking at it). Correct per field, of 20: bank 20, branch 19, IFSC 19, cheque no. 20, MICR 20, account 20, date 19, payee 20, amount in figures 20, amount in words 19. Identical to the phase-1 result of 2026-10-31. Same caveats: the labels were written by the AI assistant and not verified by a person, and the test split is not blind. `manage.py eval-ocr --split test` was re-run too: every field was read on all 20 cheques and the amount in words agrees with the figures on 20 of 20; the committed `ocr_evaluation_test.json` was updated accordingly, without the per-image predictions (they contain private values).
 
 ## 7. Security audit results (details: `SECURITY_AUDIT.md`)
-Critical 0. **High 2, both open:** (1) one real account number, cheque numbers and MICR codes in the original code, also in the public history and on `main` (owner decision: removing needs a force-push); (2) Vite 5 development-server advisories (not in the
-deployed image; fix needs npm access). Medium 4, all fixed (Waitress dropping proxy headers, SIGTERM watchdog race, real values in an unpublished commit, memory exhaustion). Low 3, Informational 3. Pre-push audit against the 323 private values: 0 errors in the commits added by this work; its only error on the whole branch is finding 1, in the original first commit `419ccb8`; low-sensitivity warnings remain in two published test files (a bank routing code in the OpenCV fixtures, an amount in words in a scoring test; finding 8). `pip-audit`: no known vulnerabilities. By the brief's own rule, pushing with unresolved High findings is not recommended; it was done at the owner's explicit request, no account number, payee name, cheque image or signature was published by this work (finding 1 pre-dates it; finding 8 lists the low-sensitivity values that were).
+Critical 0. **High 1 open:** one real account number, cheque numbers and MICR codes in the original code, now replaced in the current files but still in the public history and on `main` (owner decision: removing needs a force-push). The second High finding, the Vite 5 development-server advisories, is **fixed** (Vite 6.4.5; `npm audit`: 0 vulnerabilities; commit `15b7bb6`). Medium 4, all fixed (Waitress dropping proxy headers, SIGTERM watchdog race, real values in an unpublished commit, memory exhaustion). Low 3, Informational 3. Pre-push audit against the 323 private values: 0 errors in the commits added by this work; its only error on the whole branch is finding 1, in the original first commit `419ccb8`; low-sensitivity warnings remain in two published test files (a bank routing code in the OpenCV fixtures, an amount in words in a scoring test; finding 8). `pip-audit`: no known vulnerabilities. By the brief's own rule, pushing with unresolved High findings is not recommended; it was done at the owner's explicit request, no account number, payee name, cheque image or signature was published by this work (finding 1 pre-dates it; finding 8 lists the low-sensitivity values that were).
 
 ## 8. Git
 * Branch: `chequeverify-v2` on GitHub (local working branch `chequeverify-v2-publish`, tracking it). `main` is `d509c14`, unchanged. PR #1 untouched.
@@ -163,14 +165,14 @@ A	scripts/time_uploads.py
 * OCR labels are not human-verified, the test split is not blind, four banks and clean flat scans only, no phone photographs, no handwriting (the data has none).
 * Signatures: one specimen per signer, no real forgeries, about 80 of 120 specimens look typed; no claim about real forgery detection is made or supported.
 * One SQLite file and one server process; sessions in the browser's `sessionStorage`; no MFA or single sign-on; no encryption at rest; mail sign-in proves control of a mailbox only; nothing sent through a real mail server.
-* A cheque takes about 4 s of OCR on 2 CPUs; a Render Starter instance is slower. Two images are processed at a time; others wait, then get `503 busy`.
+* A cheque takes about 3-4 s of OCR on 2 CPUs; the Render Free instance (0.1 CPU) will be much slower (an estimate of about 30 s, not measured). Two images are processed at a time; others wait, then get `503 busy`.
 * The hosted copy starts empty and the dataset tests do not run in GitHub's CI.
 
 ## 10. What remains, and who must do it
-1. **Create the Render service (owner).** Render dashboard, *New +*, *Blueprint*, repository `nvaltryek-001/Cheque`, branch `chequeverify-v2`; enter `CV_ADMIN_PASSWORD` (12 or more characters, letters and digits or symbols); *Apply*. Starter plan and 1 GB disk are paid.
+1. **Create the Render service (owner).** Open the one-click link in `FINAL_DEPLOYMENT_REPORT.md` (or Render dashboard, *New +*, *Blueprint*, repository `nvaltryek-001/Cheque`, branch `chequeverify-v2`); enter `CV_ADMIN_PASSWORD` (12 or more characters, letters and digits or symbols); *Apply*. The blueprint is the Free plan (no payment; data erased on sleep). `render.paid.yaml` is Starter + 1 GB disk (paid).
    Sign in at the new address with *Administrator sign-in*, user `admin`; check `<address>/api/health`.
 2. **Load cheques into the hosted copy (owner):** *Batch upload* (20 at a time).
-3. **Decide on finding 1 (owner):** remove the original file with the real account number from `main`, from the branch history and from `legacy/`, which needs a force-push; treat the number as disclosed.
-4. **Upgrade the build tool (needs npm access):** Vite and `@vitejs/plugin-react` to patched versions, `npm run build`, commit `package-lock.json`.
+3. **Decide on finding 1 (owner):** the values are replaced in the current files; for the history choose one of: rewrite `main` and the branch and force-push (rehearsed, see `SECURITY_AUDIT.md`), make the repository private, or accept the disclosure and treat the numbers as public.
+4. ~~Upgrade the build tool~~ **Done**: Vite 6.4.5 and a committed `package-lock.json` (installed with `npm ci`); validated by CI.
 5. **E-mail sign-in (owner):** choose a mail service; add `CV_SMTP_HOST`, `CV_SMTP_USER`, `CV_SMTP_FROM` and the password as `CV_SMTP_PASSWORD` in the Render dashboard; test with a real address.
 6. **Before any real use:** a person checks the OCR labels and a fresh, untouched set of cheques is scored; real consented signatures and forgeries by other people are collected and run through the evaluation protocol; an independent security test.

@@ -190,6 +190,23 @@ How it works, what it does and does not prove, and how to set it up: `docs/AUTHE
 Suggested first steps in the app: Signature enrollment → *Import from dataset* (creates the 120 signers),
 then Cheque verification → upload a cheque from `dataset/test/...` → Verify signature.
 
+### Live deployment
+
+**Status (2026-11-01): not deployed - there is no public address yet.** Creating the service on Render needs the owner's Render
+sign-in and the administrator password typed into Render's form, which nobody else can do for them. The application, the
+container image and the Free-plan blueprint are finished and checked (GitHub Actions: five jobs green; 609 backend tests; a
+rehearsal of the live check against a local copy with the real datasets: 91 of 91 checks). What is missing is only the
+service itself. Frontend and backend are one service, so there will be a single address:
+
+| | Address |
+|---|---|
+| Frontend (the web page) | *none yet* - will be `https://<service name>.onrender.com` |
+| Backend (the API) | *none yet* - the same address, paths `/api/...` |
+| Health check | *none yet* - `https://<service name>.onrender.com/api/health` |
+
+The exact steps for the owner (about 10 minutes, free plan, no card) are in `reports/final/FINAL_DEPLOYMENT_REPORT.md`, section 2.
+This table is replaced with the real addresses only after they have been opened and checked, and the report shows what was seen.
+
 ### Deploy (Docker / Render)
 
 ```bash

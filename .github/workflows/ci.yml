@@ -48,9 +48,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
-      - name: Install
+      - name: Install (exactly the versions in package-lock.json)
         working-directory: Frontend
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Type-check and build
         working-directory: Frontend
         run: npm run build
@@ -70,35 +70,24 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
+      - name: Frontend dependencies (npm ci from package-lock.json)
+        working-directory: Frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Frontend dependencies that ship in the page (npm audit --omit=dev, high and critical)
         working-directory: Frontend
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-fund
-          npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
       # The build tools (Vite and what it pulls in) are not part of the deployed image: the Docker build stage compiles the
-      # page and only the compiled files are copied on. Their advisories are about the development server (npm run dev),
-      # so they are reported on every run, as warnings, but do not stop it. Upgrading Vite to a patched major version needs
-      # a machine that can run npm and try the build: see reports/final/SECURITY_AUDIT.md, finding 2.
-      - name: Frontend build tools (npm audit, high and critical) - reported as warnings, does not block
+      # page and only the compiled files are copied on. They are audited too (since Vite 6.4.5 the whole tree is clean), so a
+      # new high or critical advisory in them turns this job red, on every push and in the weekly run.
+      - name: Frontend build tools (npm audit, whole tree, high and critical)
         working-directory: Frontend
-        continue-on-error: true
         run: |
           status=0
           npm audit --audit-level=high || status=$?
           if [ "$status" -ne 0 ]; then
-            npm audit --json 2>/dev/null | python3 ../scripts/npm_audit_annotations.py high warning || true
+            npm audit --json 2>/dev/null | python3 ../scripts/npm_audit_annotations.py high error || true
           fi
           exit $status
-      - name: Keep the generated lock file (commit it to make builds reproducible)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: frontend-package-lock
-          path: Frontend/package-lock.json
-      # TEMPORARY (removed in the next commit): print the lock file, compressed, so it can be copied from this log.
-      - name: Show the lock file (gzip + base64)
-        working-directory: Frontend
-        continue-on-error: true
-        run: gzip -9 -c package-lock.json | base64 -w 0 | fold -w 160 | sed 's/^/LOCK> /'
 
   # Everything this branch adds to main is searched for secrets, datasets, cheque images, databases and
   # environment files. Private terms (real account numbers, names) can only be searched locally: see docs/SECURITY.md.

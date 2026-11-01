@@ -78,10 +78,9 @@ values trigger some of them by design.
 * A distributed guessing attack from many addresses is not stopped by per-address throttling: strong passwords,
   MFA and a WAF are needed. Likewise nothing stops someone from asking many institutional mailboxes for codes (each person only receives
   unexpected mail); a WAF or CAPTCHA in front of `/api/auth/email/request` is the usual answer. The sign-in throttle is shared through SQLite; the rate limiter is per process.
-* Dependency scan (GitHub Actions, 2026-11-01): `pip-audit -r backend/requirements.txt` found no known vulnerabilities. `npm audit` reports one package at high level, the build tool Vite 5
-  (development-server advisories, not part of the deployed image; details and the fix in `reports/final/SECURITY_AUDIT.md` finding 2). CI blocks on the packages that ship (`npm audit --omit=dev`)
-  and reports the build tools as warnings. `package-lock.json` does not exist yet (the registries are blocked in the build sandbox): the CI job `dependency-audit` uploads a generated one;
-  commit it and switch the Dockerfile and CI to `npm ci`. Python dependencies are ranges, not hashes.
+* Dependency scan (GitHub Actions, 2026-11-01): `pip-audit -r backend/requirements.txt` found no known vulnerabilities. `npm audit` found the build tool Vite 5 at high level (development-server advisories, not part of the deployed image);
+  Vite 6.4.5 fixed that (`reports/final/SECURITY_AUDIT.md` finding 2) and `npm audit` now reports 0 vulnerabilities for the whole tree. CI blocks at high and critical for the packages that ship and for the build tools.
+  `Frontend/package-lock.json` is committed and the Dockerfile and CI install with `npm ci`, so a build installs exactly what CI audited. Python dependencies are ranges, not hashes.
 * Waitress + `CV_PROXY_HOPS` behind Render's proxy is covered by the Docker CI job, not by a test on Render itself.
 * No data-retention automation, no independent penetration test, no formal threat model review.
 * Throughput-based denial of service is limited by the rate limits only; OCR is CPU-bound.
