@@ -1,8 +1,9 @@
 import { FormEvent, useState } from "react";
-import { apiPage, post, Signer } from "../api";
+import { api, apiPage, EnrollmentOverview, post, Signer } from "../api";
 import { useAuth } from "../auth";
 import { Button, Empty, ErrorState, errText, Loading, Modal, PageHead, Pagination, Panel, Pill, useAsync, useToast } from "../components/ui";
 import { navigate } from "../router";
+import { REFERENCE_LABEL } from "./EnrollmentPanels";
 
 export const BANKS = ["axis", "canara", "icici", "syndicate", "sbi", "hdfc", "pnb", "bob", "kotak", "union", "yes", "other"];
 
@@ -47,13 +48,16 @@ export default function Enrollment() {
   const [splits, setSplits] = useState<string[]>(["train", "val", "test"]);
   const [busy, setBusy] = useState(false);
   const list = useAsync(() => apiPage<Signer[]>(`/api/signers?page=${page}&per_page=20&q=${encodeURIComponent(search)}&bank=${bank}`), [page, search, bank]);
+  const overview = useAsync(() => api<EnrollmentOverview>("/api/enrollment/overview"), [list.data]);
   const admin = can("admin");
+  const ov = overview.data;
 
   return (
     <>
       <PageHead
         title="Signature enrollment"
-        sub="Authorised signers and their reference specimens. Only administrators can enroll or change specimens."
+        sub={<>Authorised signers and their reference specimens. Only administrators can enroll or change specimens.
+          {ov && <> <b>{ov.signers_ready} of {ov.signers}</b> signers have a ready reference set ({ov.policy.min_specimens}+ independent specimens from {ov.policy.min_sessions}+ signing days); a MATCH is only issued for those.</>}</>}
         actions={admin && (
           <>
             <Button icon="dataset" onClick={() => setImporting(true)}>Import from dataset</Button>
@@ -82,7 +86,7 @@ export default function Enrollment() {
             <>
               <div className="table-wrap">
                 <table className="table">
-                  <thead><tr><th>Signer ID</th><th>Name</th><th>Bank</th><th>Account</th><th className="r">Specimens</th><th>Enrollment</th><th>Status</th><th>Source</th></tr></thead>
+                  <thead><tr><th>Signer ID</th><th>Name</th><th>Bank</th><th>Account</th><th className="r">Specimens</th><th>Reference set</th><th>Status</th><th>Source</th></tr></thead>
                   <tbody>
                     {list.data.data.map((s) => (
                       <tr key={s.id} className="clickable" onClick={() => navigate(`/enrollment/${s.id}`)}>
@@ -91,7 +95,7 @@ export default function Enrollment() {
                         <td>{s.bank.toUpperCase()}</td>
                         <td className="num">{s.account_number || "—"}</td>
                         <td className="num r">{s.specimens_active}{s.specimens_inactive ? <span className="muted"> +{s.specimens_inactive}</span> : null}</td>
-                        <td><Pill value={s.enrollment_status} /></td>
+                        <td><Pill value={s.reference_status} label={REFERENCE_LABEL[s.reference_status]} /> <span className="tiny muted">{s.independent_samples} indep. · {s.independent_days} day{s.independent_days === 1 ? "" : "s"}</span></td>
                         <td><Pill value={s.status} /></td>
                         <td className="tiny muted">{s.source}</td>
                       </tr>
@@ -127,7 +131,7 @@ export default function Enrollment() {
             }}>Import</Button>
           </>}>
           <p>Creates one signer per row of <code>genuine_signatures.csv</code> using its signer ID and bank. The account number is taken from the specimen filename. Names are left empty – they are not in the dataset.</p>
-          <p className="muted tiny">Original files are only read; copies go to private storage. Note: these specimens were cropped from the same cheque scans, so verifying those cheques against them is not an independent test.</p>
+          <p className="muted tiny">Original files are only read; copies go to private storage. Note: these specimens were cropped from the same cheque scans, so verifying those cheques against them is not an independent test. They are marked as dataset imports without a signing session, so these signers never count as having an independent reference set.</p>
           <div className="checks-inline">
             {["train", "val", "test"].map((s) => (
               <label key={s} className="check-label">

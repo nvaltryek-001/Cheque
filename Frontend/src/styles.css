@@ -291,6 +291,17 @@ summary { cursor: pointer; color: var(--blue); font-size: 13px; }
 .bar-track { height: 10px; background: var(--line-2); border-radius: 5px; overflow: hidden; }
 .bar-fill { display: block; height: 100%; background: var(--navy-2); border-radius: 5px; }
 .bar-fill.info { background: var(--blue); }
+.bar-fill.good { background: #4fb27f; }
+.meter { display: flex; flex-direction: column; gap: 4px; min-width: 200px; flex: 1; }
+.meter-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
+.meter-done { color: var(--good); }
+.readiness { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 10px; }
+.readiness-meters { display: flex; gap: 20px; flex: 1; min-width: 280px; flex-wrap: wrap; }
+.readiness-notes { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.session-pill { display: inline-block; font-size: 12px; color: var(--ink-2); }
+.upload-list { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13px; max-height: 220px; overflow: auto; }
+.upload-list li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line-2); }
+.upload-list .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-value { text-align: right; font-variant-numeric: tabular-nums; }
 .stackbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line-2); min-width: 120px; }
 .stackbar .good { background: #4fb27f; }

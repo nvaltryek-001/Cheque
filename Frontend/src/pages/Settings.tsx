@@ -26,6 +26,9 @@ function ThresholdSettings() {
         "signature.mismatch_threshold": v["signature.mismatch_threshold"] === "" ? null : Number(v["signature.mismatch_threshold"]),
         "signature.max_specimens_per_signer": Number(v["signature.max_specimens_per_signer"]),
         "signature.duplicate_hamming": Number(v["signature.duplicate_hamming"]),
+        "enrollment.min_specimens": Number(v["enrollment.min_specimens"]),
+        "enrollment.min_sessions": Number(v["enrollment.min_sessions"]),
+        "enrollment.cap_match_when_not_ready": v["enrollment.cap_match_when_not_ready"] === "true",
         "ocr.auto_signature_crop": v["ocr.auto_signature_crop"] === "true",
       };
       s.setData(await put<S>("/api/settings", body));
@@ -45,6 +48,17 @@ function ThresholdSettings() {
       </label>
       <label>Mismatch threshold override
         <input type="number" step="0.001" min="0" max="1" placeholder="use validated value" value={v["signature.mismatch_threshold"] ?? ""} onChange={set("signature.mismatch_threshold")} disabled={!admin} />
+      </label>
+      <label>Independent specimens needed for a MATCH
+        <input type="number" min="1" max="50" value={v["enrollment.min_specimens"] ?? ""} onChange={set("enrollment.min_specimens")} disabled={!admin} />
+        <span className="tiny muted">Specimens from recorded signing sessions; several from one document count once.</span>
+      </label>
+      <label>Different signing days needed for a MATCH
+        <input type="number" min="1" max="50" value={v["enrollment.min_sessions"] ?? ""} onChange={set("enrollment.min_sessions")} disabled={!admin} />
+      </label>
+      <label>Cap MATCH at REVIEW when the reference set is not ready
+        <select value={v["enrollment.cap_match_when_not_ready"] ?? "true"} onChange={set("enrollment.cap_match_when_not_ready")} disabled={!admin}><option value="true">Yes (recommended)</option><option value="false">No</option></select>
+        <span className="tiny muted">Switching this off lets a single specimen produce a MATCH.</span>
       </label>
       <label>Maximum active specimens per signer
         <input type="number" min="1" max="50" value={v["signature.max_specimens_per_signer"] ?? ""} onChange={set("signature.max_specimens_per_signer")} disabled={!admin} />

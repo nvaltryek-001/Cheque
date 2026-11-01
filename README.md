@@ -30,8 +30,8 @@ Banks still key in cheque details by hand and compare signatures by eye. This pr
 | MICR | Dedicated E-13B reader (template model learned from the train split) for cheque number + MICR code |
 | Review | Edit any field; machine values are preserved and edits stored as corrections; reviewer notes; mark reviewed |
 | Batch | Up to 20 cheques per batch |
-| Enrollment | Signer CRUD, multiple specimens, quality gate, preprocessing preview, duplicate detection (same signer and across signers), replace/deactivate/delete, enrollment history, dataset import |
-| Verification | From a processed cheque (auto or manual crop) or an uploaded image; compares against all active specimens; reasons, feature scores, threshold scale; manual approve/reject |
+| Enrollment | Signer CRUD, signing sessions (day, method, consent reference), multi-file upload into a session, reference-set readiness (independent specimens × signing days), quality gate, duplicate and same-signing detection, replace/deactivate/delete, enrollment history, bulk `import-collection`, dataset import – see `docs/SIGNATURE_ENROLLMENT.md` |
+| Verification | From a processed cheque (auto or manual crop) or an uploaded image; compares against all active specimens; reasons, feature scores, threshold scale; manual approve/reject. A `MATCH` is only issued when the signer's reference set is ready (otherwise it is lowered to `REVIEW`) |
 | Datasets | Live audits of both datasets; manifest-based browser |
 | Models | Readiness assessment; background training/evaluation jobs with history and metrics |
 | Reports | Per-cheque PDF; CSV exports (cheques, verifications, signers, audit log); audit/evaluation report downloads |

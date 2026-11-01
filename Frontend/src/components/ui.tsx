@@ -139,7 +139,7 @@ const STATUS_TONE: Record<string, string> = {
   APPROVED: "good", MATCH: "good", READY: "good",
   review: "warn", warn: "warn", needs_review: "warn", REVIEW: "warn", running: "info", "READY (limited)": "warn",
   missing: "bad", fail: "bad", failed: "bad", inactive: "muted", MISMATCH: "bad", REJECTED: "bad", BLOCKED: "bad",
-  no_specimens: "muted",
+  no_specimens: "muted", ready: "good", incomplete: "warn", none: "muted",
 };
 export function Pill({ value, label }: { value: string; label?: string }) {
   return <span className={`pill pill-${STATUS_TONE[value] ?? "muted"}`}>{label ?? value.replace(/_/g, " ")}</span>;
@@ -344,6 +344,18 @@ export function Bars({ rows, tone }: { rows: { label: string; value: number }[];
           <span className="bar-value">{r.value}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Progress toward a target (e.g. independent specimens 3 of 5). The width is set through the CSSOM, which the
+ *  page's Content-Security-Policy allows (unlike an inline style attribute in the markup). */
+export function Meter({ label, value, target }: { label: string; value: number; target: number }) {
+  const done = value >= target;
+  return (
+    <div className="meter" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.min(value, target)}>
+      <div className="meter-head"><span>{label}</span><b className={`num${done ? " meter-done" : ""}`}>{value} / {target}</b></div>
+      <span className="bar-track"><span className={`bar-fill${done ? " good" : ""}`} style={{ width: `${Math.min(100, (value / Math.max(1, target)) * 100)}%` }} /></span>
     </div>
   );
 }

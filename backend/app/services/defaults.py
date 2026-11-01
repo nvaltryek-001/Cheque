@@ -9,7 +9,12 @@ DEFAULT_SETTINGS = {
     # null = use the thresholds chosen on the validation split by the trained model
     "signature.match_threshold": None,
     "signature.mismatch_threshold": None,
-    "signature.max_specimens_per_signer": 5,
+    "signature.max_specimens_per_signer": 20,
+    # Reference-set policy: a MATCH is only trusted when the signer's specimens are independent samples
+    # (different recorded signing days, not cut from the same page). See services/enrollment.readiness.
+    "enrollment.min_specimens": 5,
+    "enrollment.min_sessions": 2,
+    "enrollment.cap_match_when_not_ready": True,
     "signature.duplicate_hamming": 6,
     "ocr.auto_signature_crop": True,
     "retention.days": 0,  # 0 = keep until deleted manually

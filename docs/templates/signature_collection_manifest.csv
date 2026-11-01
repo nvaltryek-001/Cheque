@@ -1,0 +1,4 @@
+signer_code,session_date,file,bank,method,instrument,consent_ref,source_ref,full_name,account_number
+EXAMPLE-001,2026-01-05,EXAMPLE-001_2026-01-05_01.png,axis,paper_scan,blue ball pen / flatbed 300 dpi,CF-EXAMPLE-0001,,,
+EXAMPLE-001,2026-01-05,EXAMPLE-001_2026-01-05_02.png,axis,paper_scan,blue ball pen / flatbed 300 dpi,CF-EXAMPLE-0001,,,
+EXAMPLE-001,2026-01-19,EXAMPLE-001_2026-01-19_01.png,axis,paper_scan,black gel pen / flatbed 300 dpi,CF-EXAMPLE-0001,,,

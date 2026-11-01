@@ -23,7 +23,7 @@ export function SignerPicker({ value, onChange }: { value: number | null; onChan
             className={`picker-item${selected?.id === s.id ? " selected" : ""}`}
             onClick={() => { setSelected(s); onChange(s); }}>
             <span><b>{s.signer_code}</b> {s.full_name && <span className="muted">· {s.full_name}</span>}</span>
-            <span className="tiny muted">{s.bank.toUpperCase()} · {s.specimens_active} specimen{s.specimens_active === 1 ? "" : "s"}</span>
+            <span className="tiny muted">{s.bank.toUpperCase()} · {s.specimens_active} specimen{s.specimens_active === 1 ? "" : "s"}{s.reference_status !== "ready" ? " · reference not ready" : ""}</span>
           </button>
         ))}
       </div>
@@ -79,6 +79,13 @@ export function VerificationResult({ v, onChange }: { v: Verification; onChange?
           <figcaption>Closest enrolled specimen{best ? ` (#${best.specimen_id})` : ""}</figcaption>
         </figure>
       </div>
+      {d?.capped_by_policy && (
+        <div className="banner banner-warn" role="note">
+          <b>Not a MATCH by policy.</b> The similarity score alone reached MATCH, but this signer's reference set is not ready
+          ({d.reference_set?.independent_samples ?? 0} of {d.reference_set?.policy.min_specimens ?? "?"} independent specimens, {d.reference_set?.independent_days ?? 0} of {d.reference_set?.policy.min_sessions ?? "?"} signing days),
+          so the decision was lowered to REVIEW. {v.signer_id && <a href={`#/enrollment/${v.signer_id}`}>Open the signer's enrollment</a>}
+        </div>
+      )}
       {d && (
         <>
           <ul className="reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
@@ -215,6 +222,9 @@ export default function SignatureVerify({ chequeId, signerId }: { chequeId: stri
         <Panel title="2 · Enrolled signer">
           <SignerPicker value={signerId ? Number(signerId) : null} onChange={setSigner} />
           {signer && signer.specimens_active === 0 && <p className="warn-text tiny">This signer has no active specimens.</p>}
+          {signer && signer.specimens_active > 0 && signer.reference_status !== "ready" && (
+            <p className="warn-text tiny">Reference set not ready ({signer.independent_samples} independent specimens, {signer.independent_days} signing day{signer.independent_days === 1 ? "" : "s"}): this comparison cannot end in MATCH, only REVIEW or MISMATCH.</p>
+          )}
           <div className="row-actions">
             <Button kind="primary" icon="signature" busy={busy} disabled={!ready} onClick={run}>Compare signatures</Button>
           </div>

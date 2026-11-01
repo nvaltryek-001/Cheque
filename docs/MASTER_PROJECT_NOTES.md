@@ -53,8 +53,10 @@ Linux/macOS: `./start.sh setup|test|dev`. Docker: `docker build -t chequeverify 
 
 ## 6. API and database
 API reference: `docs/API.md` (≈60 routes, JSON envelope, roles admin/operator/auditor).
-Tables: `users`, `cheques` (machine fields + human corrections kept separately), `signers`, `specimens`,
+Tables: `users`, `cheques` (machine fields + human corrections kept separately), `signers`, `specimens`
+(+ `session_id`, `source_ref`, `origin`), `enrollment_sessions` (signing day, method, instrument, consent reference),
 `verifications`, `model_runs`, `settings`, `audit_log`, `login_attempts` (sign-in throttle; `backend/app/db.py`).
+Older databases are upgraded in place by an additive, idempotent migration at start-up (`db.migrate`).
 
 ## 7. AI/ML workflow (current behaviour)
 - OCR: page normalised to 1600 px; header read at 2× (+ sparse pass for the branch); field regions
@@ -63,7 +65,9 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
 - MICR: E-13B 1-NN templates learned from the train split (labels = filename cheque number).
 - Signature: score = fusion of ORB, SIFT, SSIM, HOG, profiles, chamfer, density, aspect (thresholds from
   validation). Then an alteration check aligns the query to each specimen: an edited near-copy → MISMATCH,
-  a near pixel-identical copy → REVIEW.
+  a near pixel-identical copy → REVIEW. Reference-set policy (Phase 3): a MATCH is only issued when the signer
+  has ≥ 5 independent specimens (recorded signing sessions, same-source images count once) from ≥ 2 different
+  signing days; otherwise it is lowered to REVIEW (`details.capped_by_policy`). MISMATCH is never softened.
 
 ### Measured results (details: `reports/final/MODEL_EVALUATION.md`)
 | Measure | Result |
@@ -102,6 +106,8 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
 | 20 | CI hardening: read-only token, SHA-pinned actions, `pip-audit`, `npm audit`, Dependabot | TESTING | workflow syntax and shell steps validated locally; runs after the first push |
 | 21 | `package-lock.json` and dependency vulnerability scan | BLOCKED | npm/PyPI registries are blocked in the build sandbox (403); CI `dependency-audit` generates the lock and the audit results |
 | 22 | HttpOnly-cookie sessions, MFA/SSO, encryption at rest | NOT STARTED | design decisions for the deployer, see `docs/SECURITY.md` |
+| 23 | Genuine-signature collection and enrollment workflow (software) | COMPLETED | Phase 3: signing sessions, independence/readiness rule, same-signing refusal (≥ 98 % aligned ink agreement), batch upload, MATCH cap, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload). 88 new tests (`test_enrollment.py` 63, `test_collection.py` 25), live smoke 28/28, Chromium check 41/41 under the CSP. Protocol: `docs/SIGNATURE_ENROLLMENT.md` |
+| 24 | Real collection of genuine signatures under that protocol | BLOCKED | needs consenting signers, a collector, an encrypted store; target ≥ 30 signers × ≥ 10 signatures on ≥ 2 days (see §9) |
 
 ## 9. Known bugs / limitations
 - OCR (after phase 1, test set, not blind): 4 of 200 fields still wrong, all flagged for review; 44 of 196
@@ -117,6 +123,16 @@ Tables: `users`, `cheques` (machine fields + human corrections kept separately),
   cheque) and no skilled forgeries; ~2/3 of specimens appear to be typeset names. Behaviour on real,
   independently signed genuine signatures and on skilled forgeries is unknown.
 - 10 % of synthetic forgeries are visually identical to the genuine image (undetectable by design).
+- Enrollment policy (Phase 3, **behaviour change**): the cap is on by default, so every signer whose specimens have
+  no recorded signing session (all existing enrollments, all dataset imports) gets REVIEW instead of MATCH until
+  sessions are recorded or linked. This is deliberate (one specimen cannot support a MATCH) and can be switched off
+  in Settings (audited). Dataset-imported signers can never become ready from that data.
+- The independence of signing days is attested by whoever records the session; the software refuses byte/perceptual
+  duplicates and re-captures that agree ≥ 98 % after alignment, but two separate photocopies of one signing can pass.
+  "Ready" (5 specimens / 2 days) is a conservative default, not a value derived from data; a ready set makes a
+  MATCH allowed, not reliable.
+- `retention.days` is only a setting: there is no automatic deletion of signatures or consent withdrawal workflow
+  beyond deleting the signer.
 - Waitress not tested in the build environment (falls back to Flask's threaded server if missing).
 - After sign-out/in the UI stays on the last page.
 
@@ -135,3 +151,4 @@ for persistent storage (see `docs/DEPLOYMENT.md`).
 | 2026-10-31 | Dataset validation report; genuine-signature figures withdrawn as GAR; OCR test label corrected (183/200) |
 | 2026-10-31 | Phase 1 OCR: digit-pass account read, 3-rendering payee vote, amount-box re-read, boxed-date families, per-line header reads, IFSC prefix repair, spelling-normalisation flag; `score-ocr` command |
 | 2026-11-01 | Phase 2 security: header-based image size limit, persisted sign-in throttle (no account lock), per-user rate limits, password policy, CSP/HSTS/Permissions-Policy/COOP/CORP, CI hardening + Dependabot, `.env` comment parsing fix, pre-push audit tool; real values removed from tests (`57dba7d`) |
+| 2026-11-01 | Phase 3 signature enrollment: `enrollment_sessions` table + specimen provenance columns (additive migration), readiness rule and MATCH cap, same-signing refusal, batch upload, session/readiness API, `manage.py import-collection`, UI (reference-set panel, sessions, multi-file upload, readiness column, verification banner, settings), `docs/SIGNATURE_ENROLLMENT.md`, manifest template; default `signature.max_specimens_per_signer` 5 → 20 for new installs |

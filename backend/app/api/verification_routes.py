@@ -11,7 +11,7 @@ from ..db import dumps, execute, get_setting, now_iso, query, row_to_dict
 from ..services import audit, models, storage
 from ..services.auth import login_required
 from ..services.throttle import rate_limited
-from ..services.enrollment import load_reference_set, process_or_fail
+from ..services.enrollment import apply_reference_policy, load_reference_set, process_or_fail, readiness_for
 from ..signature.compare import decide
 from ..signature.detect import crop_fraction, find_signature
 from .common import ApiError, json_body, ok, pagination
@@ -25,8 +25,10 @@ def signature_health():
     st = models.status()
     counts = query("SELECT (SELECT COUNT(*) FROM signers WHERE status='active') signers, "
                    "(SELECT COUNT(*) FROM specimens WHERE status='active') specimens", one=True)
+    reps = readiness_for([r["id"] for r in query("SELECT id FROM signers WHERE status='active'")])
     return ok({"model": st["signature_model"], "active_signers": counts["signers"],
                "active_specimens": counts["specimens"],
+               "signers_reference_ready": sum(r["ready"] for r in reps.values()),
                "ready": counts["specimens"] > 0,
                "message": None if counts["specimens"] else "No specimens enrolled – enroll signers before verifying."})
 
@@ -105,6 +107,7 @@ def verify():
 
     q = process_or_fail(query_img)
     result = decide(q, refs, models.fusion_model(), _thresholds())
+    apply_reference_policy(result, signer_id)
     for p in result["per_specimen"]:
         p["specimen_id"] = ref_ids[p["index"]]
     result["query_quality"] = q.quality
@@ -114,7 +117,8 @@ def verify():
                   (int(cheque_id) if cheque_id else None, signer_id, qname, result["decision"], result["score"],
                    dumps(result), result["model_version"], g.user["id"], now_iso()))
     audit.record("verification.create", "verification", vid,
-                 {"signer_id": signer_id, "cheque_id": cheque_id, "decision": result["decision"]})
+                 {"signer_id": signer_id, "cheque_id": cheque_id, "decision": result["decision"],
+                  "capped_by_policy": bool(result.get("capped_by_policy"))})
     return ok(_out(_get(vid)), 201)
 
 

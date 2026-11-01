@@ -6,6 +6,8 @@
     python manage.py eval-ocr --split test    # OCR field evaluation on a split
     python manage.py score-ocr --images DIR --labels CSV [--private-csv OUT] [--masked-report OUT.md]
                                               # score against human-verified labels kept outside git
+    python manage.py import-collection --manifest M.csv --images DIR [--create-signers] [--dry-run]
+                                              # enroll a collected genuine-signature set, one signing session per day
     python manage.py create-user NAME --role operator
     python manage.py reset-password NAME
     python manage.py unlock-logins              # clear the sign-in throttle (e.g. your own IP got blocked)
@@ -127,6 +129,32 @@ def cmd_score_ocr(args) -> None:
         print(f"masked table (no values): {args.masked_report}")
 
 
+def cmd_import_collection(args) -> None:
+    from app.services import collection
+    app = _db()
+    with app.app_context():
+        try:
+            res = collection.import_collection(
+                Path(args.manifest), Path(args.images), create_signers=args.create_signers,
+                allow_poor_quality=args.allow_poor_quality, allow_missing_consent=args.allow_missing_consent,
+                dry_run=args.dry_run)
+        except collection.ManifestError as exc:
+            sys.exit(f"import-collection: {exc}")
+    for r in res["results"]:
+        if not r["ok"]:
+            print(f"  line {r['line']} ({r['signer_code'] or '-'}): {r['error']}")
+    mode = "DRY RUN - nothing written. " if res["dry_run"] else ""
+    print(f"{mode}rows {res['rows']}: valid {res['valid']}, invalid {res['invalid']}"
+          + ("" if res["dry_run"] else f", enrolled {res['enrolled']}, refused by the enrollment checks {res['rejected']}, "
+             f"signers created {res['signers_created']}, sessions created {res['sessions_created']}"))
+    for code, rep in sorted(res["signers"].items()):
+        need = ("; ".join(rep["missing"])) or "-"
+        print(f"  {code}: {rep['status']} ({rep['independent_samples']} independent specimens, "
+              f"{rep['independent_days']} signing days) needs: {need}")
+    if res["invalid"] or res["rejected"]:
+        sys.exit(1)
+
+
 def cmd_unlock_logins(_args) -> None:
     app = _db()
     with app.app_context():
@@ -185,6 +213,14 @@ def main() -> None:
     c.add_argument("--role", default="operator")
     c.add_argument("--full-name", default="")
     c.set_defaults(fn=cmd_create_user)
+    ic = sub.add_parser("import-collection", help="enroll a collected genuine-signature set (see docs/SIGNATURE_ENROLLMENT.md)")
+    ic.add_argument("--manifest", required=True, help="CSV: signer_code, session_date, file, ... (kept outside git)")
+    ic.add_argument("--images", required=True, help="folder the manifest's 'file' column is relative to (kept outside git)")
+    ic.add_argument("--create-signers", action="store_true", help="create signers that do not exist yet (needs a bank column)")
+    ic.add_argument("--allow-poor-quality", action="store_true", help="enroll images below the quality standard")
+    ic.add_argument("--allow-missing-consent", action="store_true", help="accept rows without consent_ref (test data only)")
+    ic.add_argument("--dry-run", action="store_true", help="validate the manifest and write nothing")
+    ic.set_defaults(fn=cmd_import_collection)
     sub.add_parser("unlock-logins").set_defaults(fn=cmd_unlock_logins)
     r = sub.add_parser("reset-password")
     r.add_argument("username")

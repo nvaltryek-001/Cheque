@@ -9,11 +9,14 @@ Uses synthetic images only. It checks that
     console errors (dynamic widths/positions set through React `style` props still apply),
   * the policy really is enforced by the browser (positive controls: inline script, eval(), inline style
     attribute, foreign image and foreign fetch are all blocked),
-  * sign-in through the form, every route, authenticated images (blob: URLs) and sign-out work.
+  * sign-in through the form, every route, authenticated images (blob: URLs) and sign-out work,
+  * the enrollment workflow in the browser: readiness meters, recording a signing session through the form,
+    multi-file upload into the session, duplicate refusal, and the reference set turning "ready".
 
 Exit code 0 only when every check passes.
 """
 import argparse
+import datetime
 import json
 import sys
 import urllib.error
@@ -43,9 +46,10 @@ def call(base, method, path, token=None, body=None, files=None, fields=None):
     if files or fields:
         b = uuid.uuid4().hex
         parts = [f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode() for k, v in (fields or {}).items()]
-        for k, (name, content) in (files or {}).items():
-            parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"; filename="{name}"\r\n'
-                         f'Content-Type: image/png\r\n\r\n'.encode() + content + b"\r\n")
+        for k, item in (files or {}).items():
+            for name, content in (item if isinstance(item, list) else [item]):     # several files under one field
+                parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"; filename="{name}"\r\n'
+                             f'Content-Type: image/png\r\n\r\n'.encode() + content + b"\r\n")
         data = b"".join(parts) + f"--{b}--\r\n".encode()
         headers["Content-Type"] = f"multipart/form-data; boundary={b}"
     try:
@@ -86,7 +90,11 @@ def seed(base, password):
     cid = b["data"]["id"]
     s, b = call(base, "POST", "/api/verifications", token, fields={"signer_id": sid, "cheque_id": cid})
     assert s == 201, b
-    return sid, cid
+    return sid, cid, token
+
+
+def fresh_signature_png():
+    return cv2.imencode(".png", signature(uuid.uuid4().int % 1_000_000))[1].tobytes()
 
 
 # ------------------------------------------------------------------ the browser part
@@ -127,9 +135,64 @@ def blob_image_shown(page, timeout_ms: int = 8000) -> bool:
         waited += 200
 
 
+def enrollment_flow(page, base, sid, token):
+    """Readiness meters, a signing session recorded through the form, multi-file upload, duplicate refusal."""
+    day = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
+    page.goto(f"{base}/#/enrollment/{sid}")
+    page.wait_for_selector("[role=meter]")
+    body = page.inner_text("body").lower()          # pills are shown capitalised by CSS; inner_text applies it
+    check("readiness panel shows the two meters", page.locator("[role=meter]").count() == 2)
+    check("a thin reference set is announced as not ready", "reference not ready" in body and "no match will be issued" in body, body[:200])
+    check("an unsessioned specimen is flagged", "no session" in body)
+
+    page.click("button:has-text('Record signing session')")
+    page.fill("input[type=date]", day)
+    page.fill("input[placeholder^='Reference of the signed consent']", "BROWSER-CONSENT")
+    page.click("button:has-text('Record session')")
+    page.wait_for_selector(f"td:has-text('{day}')")
+    check("signing session recorded through the form", True)
+
+    page.locator("button:has-text('Add signatures')").first.click()
+    files = [{"name": f"browser{i}.png", "mimeType": "image/png", "buffer": fresh_signature_png()} for i in range(2)]
+    page.set_input_files("input[type=file]", files)
+    page.click("button:has-text('Enroll 2 signatures')")
+    page.wait_for_selector(".upload-list .pill-good")
+    modal = page.inner_text(".modal")
+    check("multi-file upload enrolls both signatures", "2 enrolled" in modal and "0 rejected" in modal, modal[:200])
+    page.click(".modal button:has-text('Close')")
+    page.wait_for_timeout(600)
+    now = page.get_attribute("[role=meter] >> nth=0", "aria-valuenow")
+    check("specimen meter counts the two independent signatures", now == "2", now)
+    width = page.evaluate("document.querySelector('.meter .bar-fill').getBoundingClientRect().width")
+    check("meter width set through the CSSOM applies under the policy", width and width > 0, width)
+
+    # the same image again is refused, and the refusal is explained
+    page.locator("button:has-text('Add signatures')").first.click()
+    page.set_input_files("input[type=file]", [files[0]])
+    page.click("button:has-text('Enroll 1 signature')")
+    page.wait_for_selector(".upload-list .warn-text")
+    check("a repeated image is refused with a reason", "duplicate" in page.inner_text(".upload-list").lower(), page.inner_text(".upload-list"))
+    page.click(".modal button:has-text('Close')")
+
+    # a second signing day (through the API) completes the reference set
+    day2 = (datetime.date.today() - datetime.timedelta(days=40)).isoformat()
+    s, b = call(base, "POST", f"/api/signers/{sid}/sessions", token, {"session_date": day2, "consent_ref": "BROWSER-CONSENT"})
+    assert s == 201, b
+    s, b = call(base, "POST", f"/api/signers/{sid}/specimens/batch", token, fields={"session_id": b["data"]["id"]},
+                files={"files": [(f"old{i}.png", fresh_signature_png()) for i in range(3)]})
+    assert s == 201 and b["data"]["enrolled"] == 3, b
+    page.reload()                      # the page is already on this route: a same-URL goto() would keep the stale data
+    page.wait_for_selector("text=so a MATCH can be issued")
+    check("five independent specimens on two days make the reference set ready", "reference ready" in page.inner_text("body").lower())
+    page.goto(f"{base}/#/enrollment")
+    page.wait_for_selector("text=signers have a ready reference set")
+    check("the signer list shows the reference status", "reference ready" in page.inner_text("body").lower())
+    check("enrollment workflow: no policy violations", page.evaluate("window.__csp") == [], page.evaluate("window.__csp"))
+
+
 def run(base, password, shots):
     from playwright.sync_api import sync_playwright
-    sid, cid = seed(base, password)
+    sid, cid, token = seed(base, password)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_context(viewport={"width": 1400, "height": 900}).new_page()
@@ -167,6 +230,7 @@ def run(base, password, shots):
             if shots:
                 page.screenshot(path=f"{shots}/{route.strip('/').replace('/', '_').replace('?', '_').replace('=', '-').replace('&', '_') or 'dashboard'}.png")
         check("no policy violations while visiting every page", page.evaluate("window.__csp") == [], page.evaluate("window.__csp"))
+        enrollment_flow(page, base, sid, token)
 
         # --- authenticated images arrive as blob: URLs and are displayed
         page.goto(f"{base}/#/cheques/{cid}")

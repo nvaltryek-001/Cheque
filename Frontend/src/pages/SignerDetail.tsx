@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { api, AuditEntry, del, patch, post, put, Signer, Specimen } from "../api";
+import { api, AuditEntry, del, EnrollmentSession, patch, post, put, Readiness, Signer, Specimen } from "../api";
 import { useAuth } from "../auth";
 import { AuthImage, Button, Confirm, Empty, ErrorState, errText, FileDrop, fmtDate, Loading, Modal, PageHead, Panel, Pill, useAsync, useToast } from "../components/ui";
 import { navigate } from "../router";
 import { SignerForm } from "./Enrollment";
+import { LinkSession, ReadinessPanel, REFERENCE_LABEL, SessionForm, SessionsPanel, SessionUpload } from "./EnrollmentPanels";
 
-type Detail = Signer & { specimens: Specimen[]; history: AuditEntry[] };
+type Detail = Signer & { specimens: Specimen[]; history: AuditEntry[]; enrollment: Readiness; sessions: EnrollmentSession[] };
 type Preview = { image: string; quality: { score: number; acceptable: boolean; issues: { message: string }[] } };
 
 function SpecimenUpload({ title, onUpload, onClose }: { title: string; onUpload: (f: File, allowPoor: boolean) => Promise<void>; onClose: () => void }) {
@@ -28,7 +29,7 @@ function SpecimenUpload({ title, onUpload, onClose }: { title: string; onUpload:
         if (!file) return;
         setBusy(true);
         try { await onUpload(file, allowPoor); onClose(); } catch (e) { toast("error", errText(e)); } finally { setBusy(false); }
-      }}>Enroll specimen</Button>
+      }}>Replace specimen</Button>
     </>}>
       <FileDrop label={file ? `${file.name} – click to change` : "Drop a specimen signature, or click to choose"} onFiles={(f) => choose(f[0])} />
       {preview && (
@@ -52,8 +53,10 @@ export default function SignerDetail({ id }: { id: number }) {
   const toast = useToast();
   const { data: s, error, loading, reload } = useAsync(() => api<Detail>(`/api/signers/${id}`), [id]);
   const [editing, setEditing] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<{ sessionId: number | null } | null>(null);
   const [replacing, setReplacing] = useState<Specimen | null>(null);
+  const [sessionForm, setSessionForm] = useState<{ edit?: EnrollmentSession } | null>(null);
+  const [linking, setLinking] = useState<Specimen | null>(null);
   const [confirm, setConfirm] = useState<{ text: string; label: string; run: () => Promise<void> } | null>(null);
   const admin = can("admin");
   const viewer = can("admin", "operator");
@@ -61,20 +64,21 @@ export default function SignerDetail({ id }: { id: number }) {
   if (loading && !s) return <Loading />;
   if (error || !s) return <ErrorState message={error ?? "Not found"} onRetry={reload} />;
 
-  const upload = (path: string, method: "POST" | "PUT") => async (f: File, allowPoor: boolean) => {
+  const replace = (path: string) => async (f: File, allowPoor: boolean) => {
     const fd = new FormData();
     fd.append("file", f);
     if (allowPoor) fd.append("allow_poor_quality", "true");
-    await (method === "POST" ? post(path, fd) : put(path, fd));
-    toast("success", method === "POST" ? "Specimen enrolled" : "Specimen replaced – the old one is kept as inactive");
+    await put(path, fd);
+    toast("success", "Specimen replaced – the old one is kept as inactive, the new one stays in the same session");
     reload();
   };
+  const sessionDate = (id: number | null) => s.sessions.find((x) => x.id === id)?.session_date;
 
   return (
     <>
       <PageHead
         title={s.signer_code}
-        sub={<>{s.full_name || "Name not recorded"} · {s.bank.toUpperCase()} · account {s.account_number || "—"} · <Pill value={s.status} /> <Pill value={s.enrollment_status} /></>}
+        sub={<>{s.full_name || "Name not recorded"} · {s.bank.toUpperCase()} · account {s.account_number || "—"} · <Pill value={s.status} /> <Pill value={s.reference_status} label={REFERENCE_LABEL[s.reference_status]} /></>}
         actions={<>
           <Button onClick={() => navigate("/enrollment")}>All signers</Button>
           {viewer && s.specimens_active > 0 && <Button icon="signature" onClick={() => navigate(`/verify?signer=${s.id}`)}>Verify against this signer</Button>}
@@ -87,9 +91,15 @@ export default function SignerDetail({ id }: { id: number }) {
             run: async () => { await del(`/api/signers/${id}`); toast("success", "Signer deleted"); navigate("/enrollment"); } })}>Delete</Button>}
         </>}
       />
-      <Panel title="Reference specimens" actions={admin && s.status === "active" && <Button kind="primary" icon="plus" onClick={() => setUploading(true)}>Add specimen</Button>}>
+      <ReadinessPanel r={s.enrollment} />
+      <SessionsPanel sessions={s.sessions} admin={admin} active={s.status === "active"}
+        onNew={() => setSessionForm({})} onEdit={(x) => setSessionForm({ edit: x })} onAdd={(x) => setUploading({ sessionId: x.id })}
+        onDelete={(x) => setConfirm({ text: `Delete the empty signing session of ${x.session_date}?`, label: "Delete session",
+          run: async () => { await del(`/api/sessions/${x.id}`); toast("success", "Session deleted"); reload(); } })} />
+      <Panel title="Reference specimens" actions={admin && s.status === "active" && (
+        <Button kind="primary" icon="plus" disabled={s.sessions.length === 0} title={s.sessions.length === 0 ? "Record a signing session first" : undefined} onClick={() => setUploading({ sessionId: null })}>Add signatures</Button>)}>
         {s.specimens.length === 0 ? (
-          <Empty title="No specimens yet">Verification is disabled for this signer until at least one specimen is enrolled. Several specimens collected on different days make comparisons more reliable.</Empty>
+          <Empty title="No specimens yet">Verification is disabled for this signer until at least one specimen is enrolled, and a MATCH needs {s.enrollment.policy.min_specimens} independent specimens from {s.enrollment.policy.min_sessions} different signing days. Record a signing session, then add its signatures.</Empty>
         ) : (
           <div className="specimens">
             {s.specimens.map((sp) => (
@@ -98,11 +108,17 @@ export default function SignerDetail({ id }: { id: number }) {
                 <div className="specimen-meta">
                   <div><b>#{sp.id}</b> <Pill value={sp.status} /> {sp.replaced_by && <span className="tiny muted">replaced by #{sp.replaced_by}</span>}</div>
                   <div className="tiny muted">{sp.original_filename} · {fmtDate(sp.created_at)}</div>
+                  <div className="tiny">
+                    {sp.session_id != null ? <span className="session-pill">Signed {sessionDate(sp.session_id) ?? `(session #${sp.session_id})`}</span>
+                      : <Pill value="review" label={sp.origin === "dataset_import" ? "dataset import – no session" : "no session – not counted"} />}
+                    {sp.source_ref && <span className="muted"> · source {sp.source_ref}</span>}
+                  </div>
                   {sp.quality && <div className="tiny">Quality {sp.quality.score}/100 · ink {(sp.quality.ink_fraction * 100).toFixed(1)}%</div>}
                 </div>
                 {admin && (
                   <div className="row-actions">
                     {sp.status === "active" && <Button small onClick={() => setReplacing(sp)}>Replace</Button>}
+                    <Button small onClick={() => setLinking(sp)}>Session</Button>
                     <Button small onClick={async () => {
                       try { await patch(`/api/specimens/${sp.id}`, { status: sp.status === "active" ? "inactive" : "active" }); reload(); }
                       catch (e) { toast("error", errText(e)); }
@@ -130,8 +146,20 @@ export default function SignerDetail({ id }: { id: number }) {
           <SignerForm initial={s} submitLabel="Save changes" onSubmit={async (v) => { await patch(`/api/signers/${id}`, v); toast("success", "Signer updated"); setEditing(false); reload(); }} />
         </Modal>
       )}
-      {uploading && <SpecimenUpload title={`New specimen for ${s.signer_code}`} onClose={() => setUploading(false)} onUpload={upload(`/api/signers/${id}/specimens`, "POST")} />}
-      {replacing && <SpecimenUpload title={`Replace specimen #${replacing.id}`} onClose={() => setReplacing(null)} onUpload={upload(`/api/specimens/${replacing.id}`, "PUT")} />}
+      {sessionForm && (
+        <Modal title={sessionForm.edit ? `Signing session of ${sessionForm.edit.session_date}` : `Record a signing session for ${s.signer_code}`} onClose={() => setSessionForm(null)}>
+          <SessionForm initial={sessionForm.edit} onSubmit={async (v) => {
+            if (sessionForm.edit) await patch(`/api/sessions/${sessionForm.edit.id}`, v);
+            else await post(`/api/signers/${id}/sessions`, v);
+            toast("success", sessionForm.edit ? "Session updated" : "Session recorded – now add its signatures");
+            setSessionForm(null);
+            reload();
+          }} />
+        </Modal>
+      )}
+      {uploading && <SessionUpload signerId={id} signerCode={s.signer_code} sessions={s.sessions} sessionId={uploading.sessionId} onClose={() => setUploading(null)} onDone={reload} />}
+      {linking && <LinkSession specimen={linking} sessions={s.sessions} onClose={() => setLinking(null)} onDone={reload} />}
+      {replacing && <SpecimenUpload title={`Replace specimen #${replacing.id}`} onClose={() => setReplacing(null)} onUpload={replace(`/api/specimens/${replacing.id}`)} />}
       {confirm && <Confirm text={confirm.text} confirmLabel={confirm.label} onConfirm={confirm.run} onClose={() => setConfirm(null)} />}
     </>
   );

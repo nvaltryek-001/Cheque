@@ -124,10 +124,13 @@ def put_settings():
                 raise ApiError(400, "validation_error", f"{k} must be a number between 0 and 1.") from exc
             if not 0 <= v <= 1:
                 raise ApiError(400, "validation_error", f"{k} must be between 0 and 1.")
-        if k in ("signature.max_specimens_per_signer", "signature.duplicate_hamming", "retention.days"):
-            if not isinstance(v, int) or v < 0 or v > 1000:
+        if k in ("signature.max_specimens_per_signer", "signature.duplicate_hamming", "retention.days",
+                 "enrollment.min_specimens", "enrollment.min_sessions"):
+            if isinstance(v, bool) or not isinstance(v, int) or v < 0 or v > 1000:
                 raise ApiError(400, "validation_error", f"{k} must be a non-negative integer.")
-        if k == "ocr.auto_signature_crop" and not isinstance(v, bool):
+        if k in ("enrollment.min_specimens", "enrollment.min_sessions") and v < 1:
+            raise ApiError(400, "validation_error", f"{k} must be at least 1.")
+        if k in ("ocr.auto_signature_crop", "enrollment.cap_match_when_not_ready") and not isinstance(v, bool):
             raise ApiError(400, "validation_error", f"{k} must be true or false.")
         set_setting(k, v)
     m, mm = get_setting("signature.match_threshold"), get_setting("signature.mismatch_threshold")

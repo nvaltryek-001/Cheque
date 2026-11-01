@@ -187,7 +187,12 @@ export interface Signer {
   specimens_active: number;
   specimens_inactive: number;
   enrollment_status: "enrolled" | "no_specimens";
+  /** none | incomplete | ready – whether the reference set is independent and large enough to trust a MATCH */
+  reference_status: ReferenceStatus;
+  independent_samples: number;
+  independent_days: number;
 }
+export type ReferenceStatus = "none" | "incomplete" | "ready";
 export interface Specimen {
   id: number;
   signer_id: number;
@@ -196,6 +201,57 @@ export interface Specimen {
   quality: { score: number; acceptable: boolean; issues: { message: string }[]; ink_fraction: number } | null;
   replaced_by: number | null;
   created_at: string;
+  session_id: number | null;
+  source_ref: string;
+  origin: "upload" | "dataset_import";
+}
+export type SessionMethod = "paper_scan" | "paper_photo" | "tablet" | "other";
+export interface EnrollmentSession {
+  id: number;
+  signer_id: number;
+  session_date: string;
+  method: SessionMethod;
+  instrument: string;
+  consent_ref: string;
+  notes: string;
+  created_at: string;
+  specimens_active: number;
+  specimens_total: number;
+}
+export interface EnrollmentPolicy {
+  min_specimens: number;
+  min_sessions: number;
+  cap_match_when_not_ready: boolean;
+}
+export interface Readiness {
+  signer_id: number;
+  ready: boolean;
+  status: ReferenceStatus;
+  active_specimens: number;
+  independent_samples: number;
+  independent_days: number;
+  session_dates: string[];
+  unsessioned_specimens: number;
+  merged_specimens: number;
+  missing: string[];
+  notes: string[];
+  policy: EnrollmentPolicy;
+  sessions: EnrollmentSession[];
+  consent_recorded: boolean;
+}
+export interface EnrollmentOverview {
+  policy: EnrollmentPolicy;
+  signers: number;
+  signers_ready: number;
+  signers_incomplete: number;
+  signers_none: number;
+}
+export interface BatchEnrollResult {
+  session_id: number;
+  results: { file: string; ok: boolean; specimen?: Specimen; error?: { code: string; message: string } }[];
+  enrolled: number;
+  rejected: number;
+  enrollment: Readiness;
 }
 export interface AuditEntry {
   id: number;
@@ -223,6 +279,9 @@ export interface Verification {
   reviewed_by_name?: string;
   details?: {
     reasons: string[];
+    capped_by_policy?: boolean;
+    uncapped_decision?: Decision;
+    reference_set?: { ready: boolean; status: ReferenceStatus; active_specimens: number; independent_samples: number; independent_days: number; missing: string[]; policy: EnrollmentPolicy };
     thresholds: { match: number; mismatch: number };
     per_specimen: { specimen_id: number; score: number; features: Record<string, number | null> }[];
     explanation: { strongest_agreement: [string, number][]; weakest_agreement: [string, number][] };

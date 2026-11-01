@@ -4,7 +4,9 @@
 
 Uses synthetic images only. Exercises: health, login, create operator, create signer, enroll a
 specimen, upload a cheque (OCR + signature detection), verify from the cheque, verify an edited copy
-(must be MISMATCH), manual review, history, CSV + PDF report, persistence of the record."""
+(must be MISMATCH), manual review, history, CSV + PDF report, persistence of the record, and the
+enrollment workflow: signing sessions, batch enrollment, reference-set readiness and the cap on MATCH."""
+import datetime
 import io
 import json
 import sys
@@ -20,6 +22,7 @@ results = []
 
 
 def req(method, path, token=None, json_body=None, files=None, fields=None):
+    """files: {field: (name, bytes)} or {field: [(name, bytes), ...]} for several files under one field."""
     headers, data = {}, None
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -30,9 +33,10 @@ def req(method, path, token=None, json_body=None, files=None, fields=None):
         parts = []
         for k, v in (fields or {}).items():
             parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
-        for k, (name, content) in (files or {}).items():
-            parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"; filename="{name}"\r\n'
-                         f'Content-Type: image/png\r\n\r\n'.encode() + content + b"\r\n")
+        for k, item in (files or {}).items():
+            for name, content in (item if isinstance(item, list) else [item]):
+                parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"; filename="{name}"\r\n'
+                             f'Content-Type: image/png\r\n\r\n'.encode() + content + b"\r\n")
         data = b"".join(parts) + f"--{b}--\r\n".encode()
         headers["Content-Type"] = f"multipart/form-data; boundary={b}"
     r = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
@@ -105,6 +109,40 @@ s, b = req("GET", f"/api/cheques/{cid}/report.pdf", O)
 check("PDF report", s == 200 and b[:4] == b"%PDF")
 s, b = req("GET", "/api/reports/verifications.csv", O)
 check("CSV export", s == 200 and b.count(b"\n") >= 3)
+# the single unsessioned specimen of SMOKE-1 is not a reference set a MATCH may rest on
+s, b = req("GET", f"/api/verifications/{vid}", O)
+ref_set = b["data"]["details"]["reference_set"]
+check("one unsessioned specimen = reference set not ready", ref_set["ready"] is False and ref_set["independent_samples"] == 0, ref_set)
+check("no MATCH without a ready reference set", b["data"]["decision"] != "MATCH", b["data"]["decision"])
+
+# enrollment workflow: two signing sessions on different days, batch upload, readiness
+today = datetime.date.today()
+s, b = req("POST", "/api/signers", A, {"signer_code": "SMOKE-2", "bank": "axis"})
+check("create second signer", s in (201, 409), b)
+sid2 = b["data"]["id"] if s == 201 else req("GET", "/api/signers?q=SMOKE-2", A)[1]["data"][0]["id"]
+if s == 201:
+    sessions = []
+    for days_ago, seeds in ((30, (101, 102, 103)), (3, (104, 105))):
+        s, b = req("POST", f"/api/signers/{sid2}/sessions", A,
+                   {"session_date": (today - datetime.timedelta(days=days_ago)).isoformat(), "method": "paper_scan",
+                    "consent_ref": "SMOKE-CONSENT"})
+        check(f"record signing session {days_ago} days ago", s == 201, b)
+        sess = b["data"]["id"]
+        s, b = req("POST", f"/api/signers/{sid2}/specimens/batch", A, fields={"session_id": sess},
+                   files={"files": [(f"sig{n}.png", png(signature(n))) for n in seeds]})
+        check(f"batch enroll {len(seeds)} signatures", s == 201 and b["data"]["enrolled"] == len(seeds), b)
+    s, b = req("GET", f"/api/signers/{sid2}/enrollment", O)
+    check("reference set ready after 5 specimens on 2 days", s == 200 and b["data"]["ready"] is True
+          and b["data"]["independent_days"] == 2, b)
+    s, b = req("POST", f"/api/signers/{sid2}/specimens/batch", A, fields={"session_id": sess},
+               files={"files": [("again.png", png(signature(104)))]})
+    check("the same image is refused as a duplicate", s == 200 and b["data"]["rejected"] == 1, b)
+    s, b = req("POST", f"/api/signers/{sid2}/specimens/batch", O, fields={"session_id": sess},
+               files={"files": [("op.png", png(signature(106)))]})
+    check("operator cannot batch-enroll", s == 403, b)
+s, b = req("GET", "/api/enrollment/overview", O)
+check("enrollment overview", s == 200 and b["data"]["signers"] >= 2 and b["data"]["signers_ready"] >= 1, b)
+
 s, b = req("GET", "/api/specimens/1/image", None)
 check("specimen image needs auth", s == 401)
 s, b = req("GET", "/api/models/status", O)

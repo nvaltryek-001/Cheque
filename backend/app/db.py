@@ -66,6 +66,21 @@ CREATE TABLE IF NOT EXISTS signers (
 );
 CREATE INDEX IF NOT EXISTS idx_signers_account ON signers(account_number);
 
+-- A signing session = one sitting in which the signer wrote signatures (recorded by the person collecting them).
+-- Specimens from different session dates are independent samples; see services/enrollment.py (readiness).
+CREATE TABLE IF NOT EXISTS enrollment_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signer_id INTEGER NOT NULL REFERENCES signers(id) ON DELETE CASCADE,
+    session_date TEXT NOT NULL,                 -- YYYY-MM-DD, the day the signatures were written
+    method TEXT NOT NULL DEFAULT 'paper_scan' CHECK (method IN ('paper_scan','paper_photo','tablet','other')),
+    instrument TEXT NOT NULL DEFAULT '',        -- pen / tablet / scanner, free text
+    consent_ref TEXT NOT NULL DEFAULT '',       -- reference of the signed consent form (never the form itself)
+    notes TEXT NOT NULL DEFAULT '',
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_signer ON enrollment_sessions(signer_id);
+
 CREATE TABLE IF NOT EXISTS specimens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     signer_id INTEGER NOT NULL REFERENCES signers(id) ON DELETE CASCADE,
@@ -79,7 +94,10 @@ CREATE TABLE IF NOT EXISTS specimens (
     replaced_by INTEGER REFERENCES specimens(id) ON DELETE SET NULL,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    session_id INTEGER REFERENCES enrollment_sessions(id) ON DELETE SET NULL,
+    source_ref TEXT NOT NULL DEFAULT '',        -- page / cheque the image was cut from; same non-empty value = same source
+    origin TEXT NOT NULL DEFAULT 'upload'       -- upload | dataset_import
 );
 CREATE INDEX IF NOT EXISTS idx_specimens_signer ON specimens(signer_id);
 
@@ -184,10 +202,34 @@ def close_db(_exc: Any = None) -> None:
         db.close()
 
 
+# Columns added after the first release: (table, column, definition). Applied once to older databases.
+ADDED_COLUMNS = [
+    ("specimens", "session_id", "INTEGER REFERENCES enrollment_sessions(id) ON DELETE SET NULL"),
+    ("specimens", "source_ref", "TEXT NOT NULL DEFAULT ''"),
+    ("specimens", "origin", "TEXT NOT NULL DEFAULT 'upload'"),
+]
+
+
+def migrate(conn: sqlite3.Connection) -> list[str]:
+    """Additive, idempotent schema upgrade. Existing rows keep working: specimens without a session simply
+    count as 'no signing session recorded' (see services/enrollment.readiness)."""
+    done = []
+    for table, column, definition in ADDED_COLUMNS:
+        if column not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+            done.append(f"{table}.{column}")
+            if (table, column) == ("specimens", "origin"):   # specimens of dataset-imported signers
+                conn.execute("UPDATE specimens SET origin='dataset_import' WHERE signer_id IN "
+                             "(SELECT id FROM signers WHERE source LIKE 'dataset:%')")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_specimens_session ON specimens(session_id)")
+    return done
+
+
 def init_db(path: str) -> None:
     conn = connect(path)
     try:
         conn.executescript(SCHEMA)
+        migrate(conn)
         conn.commit()
     finally:
         conn.close()

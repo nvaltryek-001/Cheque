@@ -11,6 +11,7 @@ from ..db import execute, now_iso, query, row_to_dict
 from ..services import audit, storage
 from ..services.auth import login_required
 from ..services.throttle import rate_limited
+from ..services import enrollment
 from ..services.datasets import load_signature_manifests
 from ..services.enrollment import add_specimen, check_duplicates, process_or_fail
 from ..signature.preprocess import perceptual_hash
@@ -34,12 +35,18 @@ def _specimen(spid: int):
     return row
 
 
-def _signer_out(row) -> dict:
+def _signer_out(row, readiness: dict | None = None) -> dict:
     d = dict(row)
     counts = query("SELECT status, COUNT(*) c FROM specimens WHERE signer_id=? GROUP BY status", (row["id"],))
     d["specimens_active"] = next((c["c"] for c in counts if c["status"] == "active"), 0)
     d["specimens_inactive"] = next((c["c"] for c in counts if c["status"] == "inactive"), 0)
     d["enrollment_status"] = "enrolled" if d["specimens_active"] else "no_specimens"
+    # reference_status: none | incomplete | ready – "enrolled" only says that a file exists, not that the
+    # reference set is independent and large enough to trust a MATCH (see services/enrollment.assess)
+    rep = readiness or enrollment.readiness_for([row["id"]])[row["id"]]
+    d["reference_status"] = rep["status"]
+    d["independent_samples"] = rep["independent_samples"]
+    d["independent_days"] = rep["independent_days"]
     return d
 
 
@@ -96,7 +103,8 @@ def list_signers():
     total = query(f"SELECT COUNT(*) c FROM signers {clause}", params, one=True)["c"]
     rows = query(f"SELECT * FROM signers {clause} ORDER BY signer_code LIMIT ? OFFSET ?",
                  (*params, per_page, (page - 1) * per_page))
-    return ok([_signer_out(r) for r in rows], total=total, page=page, per_page=per_page)
+    reps = enrollment.readiness_for([r["id"] for r in rows])
+    return ok([_signer_out(r, reps[r["id"]]) for r in rows], total=total, page=page, per_page=per_page)
 
 
 @bp.post("/api/signers")
@@ -124,6 +132,8 @@ def get_signer(sid: int):
                  "(entity='specimen' AND entity_id IN (SELECT CAST(id AS TEXT) FROM specimens WHERE signer_id=?)) "
                  "ORDER BY id DESC LIMIT 50", (str(sid), sid))
     out["history"] = [dict(h) for h in hist]
+    out["enrollment"] = enrollment.readiness(sid)
+    out["sessions"] = out["enrollment"]["sessions"]
     return ok(out)
 
 
@@ -164,6 +174,72 @@ def lookup():
     return ok(_signer_out(row) if row else None)
 
 
+# ------------------------------------------------------------------ signing sessions
+@bp.get("/api/signers/<int:sid>/enrollment")
+@login_required()
+def signer_enrollment(sid: int):
+    """Readiness of the signer's reference set (independent specimens, signing days) and its sessions."""
+    _signer(sid)
+    return ok(enrollment.readiness(sid))
+
+
+@bp.get("/api/enrollment/overview")
+@login_required()
+def enrollment_overview():
+    return ok(enrollment.overview())
+
+
+@bp.post("/api/signers/<int:sid>/sessions")
+@login_required("admin")
+def create_session(sid: int):
+    """Record a signing session: the day the signer wrote the signatures that will be enrolled with it."""
+    _signer(sid)
+    data = json_body()
+    session_id = enrollment.create_session(sid, data, g.user["id"])
+    row = enrollment.session_row(session_id)
+    # consent_ref and notes are deliberately not copied into the audit log
+    audit.record("session.create", "signer", sid, {"session_id": session_id, "session_date": row["session_date"],
+                                                   "method": row["method"]})
+    return ok(_session_out(row), 201)
+
+
+@bp.patch("/api/sessions/<int:session_id>")
+@login_required("admin")
+def update_session(session_id: int):
+    row = enrollment.session_row(session_id)
+    data = enrollment.validate_session(json_body(), partial=True)
+    if not data:
+        raise ApiError(400, "validation_error", "Nothing to update.")
+    sets = ", ".join(f"{k}=?" for k in data)
+    execute(f"UPDATE enrollment_sessions SET {sets} WHERE id=?", (*data.values(), session_id))
+    audit.record("session.update", "signer", row["signer_id"], {"session_id": session_id, "fields": sorted(data)})
+    return ok(_session_out(enrollment.session_row(session_id)))
+
+
+@bp.delete("/api/sessions/<int:session_id>")
+@login_required("admin")
+def delete_session(session_id: int):
+    """Only an empty session can be removed: deleting one under specimens would silently turn them into
+    specimens of unknown provenance."""
+    row = enrollment.session_row(session_id)
+    linked = query("SELECT COUNT(*) c FROM specimens WHERE session_id=?", (session_id,), one=True)["c"]
+    if linked:
+        raise ApiError(409, "session_has_specimens",
+                       f"This session still has {linked} specimen(s). Move or delete them first.")
+    execute("DELETE FROM enrollment_sessions WHERE id=?", (session_id,))
+    audit.record("session.delete", "signer", row["signer_id"], {"session_id": session_id,
+                                                                "session_date": row["session_date"]})
+    return ok({"deleted": session_id})
+
+
+def _session_out(row) -> dict:
+    d = dict(row)
+    counts = query("SELECT status, COUNT(*) c FROM specimens WHERE session_id=? GROUP BY status", (row["id"],))
+    d["specimens_active"] = next((c["c"] for c in counts if c["status"] == "active"), 0)
+    d["specimens_total"] = sum(c["c"] for c in counts)
+    return d
+
+
 # ------------------------------------------------------------------ specimens
 @bp.post("/api/signers/<int:sid>/specimens")
 @login_required("admin")
@@ -174,9 +250,62 @@ def upload_specimen(sid: int):
         raise ApiError(409, "signer_inactive", "Activate the signer before enrolling specimens.")
     data, img, name = storage.read_upload(request.files.get("file"))
     allow_poor = request.form.get("allow_poor_quality") == "true"
-    spid = add_specimen(sid, data, img, name, g.user["id"], allow_poor)
-    audit.record("specimen.enroll", "specimen", spid, {"signer_id": sid, "allow_poor_quality": allow_poor})
+    session_id = _form_session_id()
+    spid = add_specimen(sid, data, img, name, g.user["id"], allow_poor, session_id=session_id,
+                        source_ref=request.form.get("source_ref", ""))
+    audit.record("specimen.enroll", "specimen", spid, {"signer_id": sid, "allow_poor_quality": allow_poor,
+                                                       "session_id": session_id})
     return ok(_specimen_out(_specimen(spid)), 201)
+
+
+def _form_session_id() -> int | None:
+    raw = (request.form.get("session_id") or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ApiError(400, "validation_error", "session_id must be an integer.") from exc
+
+
+@bp.post("/api/signers/<int:sid>/specimens/batch")
+@login_required("admin")
+@rate_limited(cost=lambda: max(1, len(request.files.getlist("files"))))
+def upload_specimens_batch(sid: int):
+    """Enroll several signatures of one signing session in one request (field 'files').
+
+    Every file is judged on its own: a rejected file (duplicate, same signing as an enrolled one, poor quality,
+    unreadable) does not stop the others. The reference images are loaded once for the whole batch."""
+    signer = _signer(sid)
+    if signer["status"] != "active":
+        raise ApiError(409, "signer_inactive", "Activate the signer before enrolling specimens.")
+    files = request.files.getlist("files")
+    if not files:
+        raise ApiError(400, "file_required", "Attach one or more images in field 'files'.")
+    if len(files) > current_app.config["MAX_BATCH_FILES"]:
+        raise ApiError(400, "too_many_files", f"At most {current_app.config['MAX_BATCH_FILES']} files per batch.")
+    session_id = _form_session_id()
+    if session_id is None:
+        raise ApiError(400, "validation_error", "session_id is required: record the signing session first, then "
+                                                "enroll its signatures (this is what makes them count as independent).")
+    enrollment.session_for(sid, session_id)
+    allow_poor = request.form.get("allow_poor_quality") == "true"
+    refs, ref_ids = enrollment.load_reference_set(sid)
+    results = []
+    for f in files:
+        try:
+            data, img, name = storage.read_upload(f, "files")
+            spid = add_specimen(sid, data, img, name, g.user["id"], allow_poor, session_id=session_id,
+                                refs=refs, ref_ids=ref_ids)
+            results.append({"file": name, "ok": True, "specimen": _specimen_out(_specimen(spid))})
+        except ApiError as err:
+            results.append({"file": f.filename, "ok": False,
+                            "error": {"code": err.code, "message": err.message}})
+    enrolled = sum(r["ok"] for r in results)
+    audit.record("specimen.batch_enroll", "signer", sid, {"session_id": session_id, "files": len(files),
+                                                          "enrolled": enrolled})
+    return ok({"session_id": session_id, "results": results, "enrolled": enrolled,
+               "rejected": len(results) - enrolled, "enrollment": enrollment.readiness(sid)}, 201 if enrolled else 200)
 
 
 @bp.put("/api/specimens/<int:spid>")
@@ -189,10 +318,15 @@ def replace_specimen(spid: int):
     if not proc.quality["acceptable"] and request.form.get("allow_poor_quality") != "true":
         raise ApiError(422, "poor_quality", "Specimen quality is not acceptable for enrollment.", {"quality": proc.quality})
     check_duplicates(old["signer_id"], storage.sha256(data), perceptual_hash(proc), exclude_id=spid)
-    # old specimen is kept (inactive) for audit; the new one takes its place
+    # old specimen is kept (inactive) for audit; the new one takes its place and, unless told otherwise, its session
+    session_id = _form_session_id()
+    if session_id is None:
+        session_id = old["session_id"]
+    source_ref = request.form.get("source_ref")
     execute("UPDATE specimens SET status='inactive', updated_at=? WHERE id=?", (now_iso(), spid))
     try:
-        new_id = add_specimen(old["signer_id"], data, img, name, g.user["id"], True)
+        new_id = add_specimen(old["signer_id"], data, img, name, g.user["id"], True, session_id=session_id,
+                              source_ref=old["source_ref"] if source_ref is None else source_ref)
     except ApiError:
         execute("UPDATE specimens SET status=?, updated_at=? WHERE id=?", (old["status"], now_iso(), spid))
         raise
@@ -203,16 +337,38 @@ def replace_specimen(spid: int):
 
 @bp.patch("/api/specimens/<int:spid>")
 @login_required("admin")
-def set_specimen_status(spid: int):
+def update_specimen(spid: int):
+    """Change a specimen's status (active/inactive) and/or the signing session / source it belongs to.
+    Linking an older specimen to the session in which it was really written is how existing enrollments are
+    brought under the session rules; it is recorded in the audit log."""
     sp = _specimen(spid)
     data = json_body()
-    require_fields(data, "status")
-    if data["status"] not in ("active", "inactive"):
-        raise ApiError(400, "validation_error", "Status must be active or inactive.")
-    if data["status"] == "active" and sp["status"] != "active":
-        check_duplicates(sp["signer_id"], sp["sha256"], sp["phash"], exclude_id=spid)
-    execute("UPDATE specimens SET status=?, updated_at=? WHERE id=?", (data["status"], now_iso(), spid))
-    audit.record(f"specimen.{'activate' if data['status'] == 'active' else 'deactivate'}", "specimen", spid)
+    if not any(k in data for k in ("status", "session_id", "source_ref")):
+        raise ApiError(400, "validation_error", "Provide status, session_id and/or source_ref.")
+    sets, params, detail = [], [], {}
+    if "status" in data:
+        if data["status"] not in ("active", "inactive"):
+            raise ApiError(400, "validation_error", "Status must be active or inactive.")
+        if data["status"] == "active" and sp["status"] != "active":
+            check_duplicates(sp["signer_id"], sp["sha256"], sp["phash"], exclude_id=spid)
+            enrollment.check_reactivation(sp)
+        sets.append("status=?"); params.append(data["status"])
+    if "session_id" in data:
+        new_session = data["session_id"]
+        if new_session is not None:
+            if isinstance(new_session, bool) or not isinstance(new_session, int):
+                raise ApiError(400, "validation_error", "session_id must be an integer or null.")
+            enrollment.session_for(sp["signer_id"], new_session)
+        sets.append("session_id=?"); params.append(new_session)
+        detail["session_id"] = new_session
+    if "source_ref" in data:
+        sets.append("source_ref=?"); params.append(enrollment.clean_source_ref(data["source_ref"]))
+        detail["source_ref_changed"] = True
+    execute(f"UPDATE specimens SET {', '.join(sets)}, updated_at=? WHERE id=?", (*params, now_iso(), spid))
+    if "status" in data:
+        audit.record(f"specimen.{'activate' if data['status'] == 'active' else 'deactivate'}", "specimen", spid)
+    if detail:
+        audit.record("specimen.update", "specimen", spid, detail)
     return ok(_specimen_out(_specimen(spid)))
 
 
@@ -281,7 +437,8 @@ def import_dataset():
             img = storage.decode_image(raw)
             if img is None:
                 raise ApiError(422, "corrupted_image", "unreadable")
-            add_specimen(sid, raw, img, r["filename"], g.user["id"], allow_poor_quality=True)
+            add_specimen(sid, raw, img, r["filename"], g.user["id"], allow_poor_quality=True,
+                         origin="dataset_import")
             enrolled += 1
         except (ApiError, OSError) as exc:
             errors.append({"file": r["filename"], "error": getattr(exc, "message", str(exc))})
