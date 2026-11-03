@@ -10,7 +10,7 @@ RUN npm ci --no-audit --no-fund
 COPY Frontend/ ./
 RUN npm run build
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     CV_INSTANCE_DIR=/data/instance CV_MODELS_DIR=/data/models CV_REPORTS_DIR=/data/reports \
     CV_OCR_ENGINE=tesseract CV_PROXY_HOPS=0 CV_CORS_ORIGINS="" PORT=8000
