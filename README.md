@@ -10,6 +10,38 @@ audit logging, dataset auditing, model training/evaluation and PDF/CSV reporting
 
 ---
 
+## 🎬 Demo
+
+<p align="center">
+  <a href="docs/demo/Cheque-demo.mp4"><img src="docs/demo/Cheque-demo.gif" width="800" alt="ChequeVerify AI walkthrough: administrator sign-in, dashboard, cheque and signature verification, batch processing, enrollment, OCR dataset, model training, analytics, reports and settings" /></a>
+  <br/><sub>Real recording of a fresh local install (<code>python run.py --prod</code>). <a href="docs/demo/Cheque-demo.mp4">Watch the MP4</a>.</sub>
+</p>
+
+> **What this recording shows honestly:** a fresh install with no cheques, no enrolled signers, no OCR engine
+> (neither PaddleOCR nor Tesseract installed) and without the private datasets, so pages show their real empty
+> states. Processing cheques needs an OCR engine; the dataset pages and *Import from dataset* need the private
+> `dataset/` and `signature/` folders (see section 6).
+
+## 📸 Screenshots
+
+| Sign-in | Dashboard |
+|---|---|
+| ![Sign-in](docs/screenshots/desktop-sign-in.png) | ![Dashboard](docs/screenshots/desktop-dashboard.png) |
+| **Cheque verification** | **Signature verification** |
+| ![Cheque verification](docs/screenshots/desktop-cheque-verification.png) | ![Signature verification](docs/screenshots/desktop-signature-verification.png) |
+| **Signature enrollment** | **Model training** |
+| ![Signature enrollment](docs/screenshots/desktop-signature-enrollment.png) | ![Model training readiness](docs/screenshots/desktop-model-training.png) |
+| **Analytics** | **Reports** |
+| ![Analytics](docs/screenshots/desktop-analytics.png) | ![Reports](docs/screenshots/desktop-reports.png) |
+
+| Mobile — sign-in | Mobile — dashboard |
+|---|---|
+| <img src="docs/screenshots/mobile-sign-in.png" width="260" alt="Mobile sign-in" /> | <img src="docs/screenshots/mobile-dashboard.png" width="260" alt="Mobile dashboard" /> |
+
+More: [batch processing](docs/screenshots/desktop-batch-processing.png) · [OCR dataset](docs/screenshots/desktop-ocr-dataset.png) · [settings](docs/screenshots/desktop-settings.png)
+
+---
+
 ## 1. Problem and objectives
 
 Banks still key in cheque details by hand and compare signatures by eye. This project:
