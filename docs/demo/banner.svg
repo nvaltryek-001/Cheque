@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="ChequeVerify AI – Read the cheque. Compare the signature. Keep the evidence.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a2366"/>
+      <stop offset="0.5" stop-color="#0b1024"/>
+      <stop offset="1" stop-color="#062a2a"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" x2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#22d3c0">
+        <animate attributeName="stop-color" values="#22d3c0;#7d8cff;#22d3c0" dur="6s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#96aaff" stroke-opacity="0.08"/>
+    </pattern>
+    <clipPath id="cq"><rect x="790" y="70" width="340" height="160" rx="12"/></clipPath>
+    <style>
+      .t{font-family:'Segoe UI',Inter,Helvetica,Arial,sans-serif}
+      .scan{animation:scan 3s ease-in-out infinite alternate}
+      @keyframes scan{from{transform:translateY(0)}to{transform:translateY(150px)}}
+      .f{animation:fill 6s ease-out infinite}
+      @keyframes fill{0%{opacity:0}15%,85%{opacity:1}100%{opacity:0}}
+      .d1{animation-delay:.6s}.d2{animation-delay:1.2s}.d3{animation-delay:1.8s}.d4{animation-delay:2.4s}
+      .tick{animation:pulse 2s ease-in-out infinite}
+      @keyframes pulse{0%,100%{opacity:.75}50%{opacity:1}}
+    </style>
+  </defs>
+
+  <rect width="1200" height="300" rx="22" fill="url(#bg)"/>
+  <rect width="1200" height="300" rx="22" fill="url(#grid)"/>
+
+  <!-- logo + title -->
+  <rect x="64" y="70" width="64" height="64" rx="16" fill="#3753f0"/>
+  <path d="M82 103 L94 115 L112 90" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="t" x="146" y="120" font-size="54" font-weight="800" fill="url(#title)">ChequeVerify AI</text>
+  <text class="t" x="66" y="176" font-size="22" font-weight="600" fill="#e8ecfb">Read the cheque. <tspan fill="#22d3c0">Compare the signature.</tspan> Keep the evidence.</text>
+  <text class="t" x="66" y="208" font-size="15" fill="#8c98be">Cheque OCR · E-13B MICR · signature verification · audit trail — Flask + React</text>
+  <g class="t" font-size="13" font-weight="700">
+    <rect x="66" y="230" width="104" height="30" rx="15" fill="#e3f6ee"/><text x="118" y="250" text-anchor="middle" fill="#0f7a55">MATCH</text>
+    <rect x="180" y="230" width="104" height="30" rx="15" fill="#fff3dc"/><text x="232" y="250" text-anchor="middle" fill="#9a5b00">REVIEW</text>
+    <rect x="294" y="230" width="114" height="30" rx="15" fill="#fde8e6"/><text x="351" y="250" text-anchor="middle" fill="#b6291f">MISMATCH</text>
+  </g>
+
+  <!-- animated cheque being scanned -->
+  <rect x="790" y="70" width="340" height="160" rx="12" fill="#f4f6fc"/>
+  <g clip-path="url(#cq)">
+    <rect x="790" y="70" width="340" height="26" fill="#3753f0"/>
+    <text class="t" x="806" y="88" font-size="12" font-weight="700" fill="#fff">BANK · CTS-2010</text>
+    <text class="t" x="1112" y="88" font-size="11" text-anchor="end" fill="#c9d2fb">DATE 01-11-2026</text>
+    <rect x="806" y="110" width="200" height="8" rx="4" fill="#d0d7ec"/>
+    <rect class="f" x="806" y="110" width="160" height="8" rx="4" fill="#3fb68b"/>
+    <rect x="806" y="130" width="250" height="8" rx="4" fill="#d0d7ec"/>
+    <rect class="f d1" x="806" y="130" width="210" height="8" rx="4" fill="#3fb68b"/>
+    <rect x="1040" y="106" width="74" height="22" rx="4" fill="none" stroke="#8a94b6"/>
+    <text class="t f d2" x="1077" y="122" font-size="12" font-weight="700" text-anchor="middle" fill="#0f7a55">₹ 25,000</text>
+    <path class="f d3" d="M1010 180 q12 -22 22 0 t22 -4 q10 -14 18 4 t20 -6" stroke="#11162b" stroke-width="2.2" fill="none"/>
+    <rect class="f d3" x="1004" y="160" width="104" height="34" rx="4" fill="none" stroke="#22d3c0" stroke-width="2" stroke-dasharray="5 3"/>
+    <text class="t f d4" x="806" y="218" font-size="13" fill="#11162b" letter-spacing="2">⑈123456⑈ 560229002⑆ 000123⑈ 31</text>
+    <g class="scan"><rect x="790" y="70" width="340" height="3" fill="#22d3c0"/><rect x="790" y="73" width="340" height="18" fill="#22d3c0" opacity="0.12"/></g>
+  </g>
+  <rect x="790" y="70" width="340" height="160" rx="12" fill="none" stroke="#22d3c0" stroke-opacity=".6"/>
+  <g class="tick"><circle cx="1130" cy="232" r="18" fill="#3fb68b"/><path d="M1121 232 l6 6 l11 -12" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round"/></g>
+</svg>

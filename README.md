@@ -1,48 +1,171 @@
-# ChequeVerify AI
+<div align="center">
 
-Cheque OCR, field validation and signature verification for Indian CTS-2010 cheques –
-a Flask + React (TypeScript) web application with role-based access, full CRUD,
-audit logging, dataset auditing, model training/evaluation and PDF/CSV reporting.
+<img src="docs/demo/banner.svg" alt="ChequeVerify AI – Read the cheque. Compare the signature. Keep the evidence." width="100%"/>
 
-> **Decision support, not a guarantee.** Every OCR value carries a confidence and a
-> review status, and every signature result is MATCH / REVIEW / MISMATCH with its
-> reasons. An authorised person makes the final call.
+# 🏦 ChequeVerify AI
+
+**Cheque OCR, field validation and signature verification for Indian CTS-2010 cheques**<br/>
+A Flask + React (TypeScript) web app with role-based access, audit logging, model training and PDF/CSV reporting.
+
+<p>
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12"/>
+  <img src="https://img.shields.io/badge/Flask-3-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask 3"/>
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 18"/>
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5"/>
+  <img src="https://img.shields.io/badge/OpenCV-OCR-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV"/>
+  <br/>
+  <img src="https://img.shields.io/badge/Tesseract_5_%2F_PaddleOCR_3-OCR-0b8a7c?style=for-the-badge" alt="Tesseract / PaddleOCR"/>
+  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/Render-blueprint-46E3B7?style=for-the-badge&logo=render&logoColor=black" alt="Render"/>
+  <img src="https://img.shields.io/badge/GitHub_Actions-CI-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions"/>
+</p>
+
+<p>
+  <img src="https://img.shields.io/badge/MICR_cheque_no.-20%2F20-3fb68b?style=flat-square" alt="MICR 20/20"/>
+  <img src="https://img.shields.io/badge/Fields_correct-196%2F200-3fb68b?style=flat-square" alt="Fields 196/200"/>
+  <img src="https://img.shields.io/badge/Different_signer_accepted-0%2F60-3fb68b?style=flat-square" alt="0/60"/>
+  <img src="https://img.shields.io/badge/Backend_tests-609-3753f0?style=flat-square" alt="609 tests"/>
+  <img src="https://img.shields.io/badge/Banks-Axis_·_Canara_·_ICICI_·_Syndicate-3753f0?style=flat-square" alt="4 banks"/>
+</p>
+
+**[🎬 Demo](#-demo) · [✨ What we built](#-what-we-built) · [🔄 How it works](#-how-a-cheque-is-verified) · [📸 Screens](#-screenshots) · [📈 Results](#-7-models-and-results-held-out-test-split-measured--not-estimated) · [⚙️ Install](#-8-installation-windows--your-existing-machine) · [🚀 Deploy](#-deploy-docker--render)**
+
+</div>
+
+> [!IMPORTANT]
+> **Decision support, not a guarantee.** Every OCR value carries a confidence and a review status, and every signature result is
+> **MATCH / REVIEW / MISMATCH** with its reasons. An authorised person makes the final call.
 
 ---
 
 ## 🎬 Demo
 
+### ▶️ Full project demo (recorded walkthrough)
+
+<div align="center">
+
+[![Watch the full ChequeVerify AI demo on Google Drive](https://img.shields.io/badge/▶_Watch_full_demo-Google_Drive-4285F4?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1O3AZv5hNvmDfmnb8QhxnYEOlPBmssiOc/view?usp=drivesdk)
+
+</div>
+
+### 🎞️ Product tour
+
+<div align="center">
+
+<a href="docs/demo/ChequeVerify-tour.mp4">
+  <img src="docs/demo/ChequeVerify-tour.gif" alt="ChequeVerify AI product tour: workflow, ten application screens and measured results" width="100%"/>
+</a>
+
+**[Watch the tour in full quality (MP4, 53 s, 1280×720)](docs/demo/ChequeVerify-tour.mp4)**
+
+</div>
+
+| ⏱️ | Scene | What you see |
+|:-:|---|---|
+| 0:00 | **Intro** | What the app does: 10-field OCR, E-13B MICR, signature verification, audit trail |
+| 0:04 | **Workflow** | The seven steps from upload to an explained **MATCH / REVIEW / MISMATCH** decision |
+| 0:10 | **10 app screens** | Sign-in → dashboard → cheque verification → batch → enrollment → signature verification → OCR dataset → training → reports → settings |
+| 0:44 | **Results** | MICR 20/20 · fields 196/200 · 0/60 different signers accepted · 609 tests |
+
+> [!NOTE]
+> The tour is built from **real screenshots** of the running app (`docs/screenshots/`). Only the title, workflow and results
+> cards are drawn, with numbers taken from `reports/final/MODEL_EVALUATION.md`. It is rendered by
+> [`scripts/demo/render_tour_video.py`](scripts/demo/render_tour_video.py).
+> The screenshots come from a **fresh install** (no cheques, no OCR engine, no private datasets), so pages show their real empty states.
+
+<details>
+<summary><b>🖥️ Raw screen recording of a fresh local install (<code>python run.py --prod</code>)</b></summary>
+<br/>
 <p align="center">
   <a href="docs/demo/Cheque-demo.mp4"><img src="docs/demo/Cheque-demo.gif" width="800" alt="ChequeVerify AI walkthrough: administrator sign-in, dashboard, cheque and signature verification, batch processing, enrollment, OCR dataset, model training, analytics, reports and settings" /></a>
-  <br/><sub>Real recording of a fresh local install (<code>python run.py --prod</code>). <a href="docs/demo/Cheque-demo.mp4">Watch the MP4</a>.</sub>
+  <br/><sub>Processing cheques needs an OCR engine. The dataset pages and <i>Import from dataset</i> need the private <code>dataset/</code> and <code>signature/</code> folders (see section 6).</sub>
 </p>
-
-> **What this recording shows honestly:** a fresh install with no cheques, no enrolled signers, no OCR engine
-> (neither PaddleOCR nor Tesseract installed) and without the private datasets, so pages show their real empty
-> states. Processing cheques needs an OCR engine; the dataset pages and *Import from dataset* need the private
-> `dataset/` and `signature/` folders (see section 6).
-
-## 📸 Screenshots
-
-| Sign-in | Dashboard |
-|---|---|
-| ![Sign-in](docs/screenshots/desktop-sign-in.png) | ![Dashboard](docs/screenshots/desktop-dashboard.png) |
-| **Cheque verification** | **Signature verification** |
-| ![Cheque verification](docs/screenshots/desktop-cheque-verification.png) | ![Signature verification](docs/screenshots/desktop-signature-verification.png) |
-| **Signature enrollment** | **Model training** |
-| ![Signature enrollment](docs/screenshots/desktop-signature-enrollment.png) | ![Model training readiness](docs/screenshots/desktop-model-training.png) |
-| **Analytics** | **Reports** |
-| ![Analytics](docs/screenshots/desktop-analytics.png) | ![Reports](docs/screenshots/desktop-reports.png) |
-
-| Mobile — sign-in | Mobile — dashboard |
-|---|---|
-| <img src="docs/screenshots/mobile-sign-in.png" width="260" alt="Mobile sign-in" /> | <img src="docs/screenshots/mobile-dashboard.png" width="260" alt="Mobile dashboard" /> |
-
-More: [batch processing](docs/screenshots/desktop-batch-processing.png) · [OCR dataset](docs/screenshots/desktop-ocr-dataset.png) · [settings](docs/screenshots/desktop-settings.png)
+</details>
 
 ---
 
-## 1. Problem and objectives
+## ✨ What we built
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🔍 Cheque intelligence
+- 🧾 **10-field extraction**: bank, IFSC, date, payee, amount in words and figures, account number, cheque number, MICR and more, each with a confidence and a review status
+- 🔢 **E-13B MICR reader** trained from 480 glyph templates
+- ✅ **Validation**: IFSC format, bank/IFSC consistency, amount in words vs figures, date validity
+- ✍️ **Automatic signature crop** from the cheque
+- 🧠 **Signature verification**: ORB · SIFT · SSIM · HOG · profiles · chamfer → fusion model + alteration check
+
+</td>
+<td width="50%" valign="top">
+
+### 🛡️ Platform
+- 👥 **3 roles** (admin, operator, auditor), password or emailed one-time code
+- 📦 **Batch processing**: up to 20 cheques at a time
+- 🖊️ **Signer enrollment** with sessions, quality gate and duplicate detection
+- 📊 **Analytics, history, PDF and CSV reports**, plus a full **audit log**
+- 🔐 CSP/HSTS, rate limits, masked account numbers, private storage
+- 🐳 **Docker + Render** blueprint · **GitHub Actions** CI · **609** backend tests
+
+</td>
+</tr>
+</table>
+
+## 🔄 How a cheque is verified
+
+```mermaid
+flowchart LR
+    A["📤 Upload<br/>content · size · decode"] --> B["🔎 Image quality"]
+    B --> C["🔤 OCR + E-13B MICR"]
+    C --> D["🧾 10 fields<br/>confidence + status"]
+    D --> E["✅ Validation<br/>IFSC · amount · date"]
+    E --> F["✍️ Signature crop"]
+    F --> G["🧠 Compare with<br/>enrolled specimens"]
+    G --> H["🟢 MATCH"]
+    G --> I["🟡 REVIEW"]
+    G --> J["🔴 MISMATCH"]
+    H & I & J --> K["👤 Manual approve / reject<br/>📄 PDF · 📝 audit log"]
+
+    style A fill:#3753f0,color:#fff,stroke:#c9d2fb
+    style B fill:#3753f0,color:#fff,stroke:#c9d2fb
+    style C fill:#0b8a7c,color:#fff,stroke:#22d3c0
+    style D fill:#0b8a7c,color:#fff,stroke:#22d3c0
+    style E fill:#3753f0,color:#fff,stroke:#c9d2fb
+    style F fill:#0b8a7c,color:#fff,stroke:#22d3c0
+    style G fill:#0b1024,color:#fff,stroke:#22d3c0
+    style H fill:#3fb68b,color:#fff
+    style I fill:#f0b440,color:#000
+    style J fill:#e5655a,color:#fff
+    style K fill:#11162b,color:#fff,stroke:#8a94b6
+```
+
+<p align="center">
+  <img src="docs/demo/tour-workflow.jpg" alt="Workflow card from the product tour" width="49%"/>
+  <img src="docs/demo/tour-results.jpg" alt="Results card from the product tour" width="49%"/>
+</p>
+
+## 📸 Screenshots
+
+| 🔐 Sign-in | 📊 Dashboard |
+|---|---|
+| ![Sign-in](docs/screenshots/desktop-sign-in.png) | ![Dashboard](docs/screenshots/desktop-dashboard.png) |
+| **🧾 Cheque verification** | **✍️ Signature verification** |
+| ![Cheque verification](docs/screenshots/desktop-cheque-verification.png) | ![Signature verification](docs/screenshots/desktop-signature-verification.png) |
+| **🖊️ Signature enrollment** | **🧠 Model training** |
+| ![Signature enrollment](docs/screenshots/desktop-signature-enrollment.png) | ![Model training readiness](docs/screenshots/desktop-model-training.png) |
+| **📈 Analytics** | **📄 Reports** |
+| ![Analytics](docs/screenshots/desktop-analytics.png) | ![Reports](docs/screenshots/desktop-reports.png) |
+| **📦 Batch processing** | **🗂️ OCR dataset** |
+| ![Batch processing](docs/screenshots/desktop-batch-processing.png) | ![OCR dataset](docs/screenshots/desktop-ocr-dataset.png) |
+
+| 📱 Mobile: sign-in | 📱 Mobile: dashboard | ⚙️ Settings |
+|:-:|:-:|:-:|
+| <img src="docs/screenshots/mobile-sign-in.png" width="230" alt="Mobile sign-in" /> | <img src="docs/screenshots/mobile-dashboard.png" width="230" alt="Mobile dashboard" /> | <img src="docs/screenshots/desktop-settings.png" width="380" alt="Settings" /> |
+
+---
+
+## 🎯 1. Problem and objectives
 
 Banks still key in cheque details by hand and compare signatures by eye. This project:
 
@@ -54,7 +177,7 @@ Banks still key in cheque details by hand and compare signatures by eye. This pr
 4. Keeps a complete, exportable record (history, audit trail, PDF and CSV reports).
 5. Is honest about what the available data can and cannot support.
 
-## 2. Features
+## ✨ 2. Features
 
 | Area | What works |
 |---|---|
@@ -77,7 +200,7 @@ waiting-for-approval pages. The interface uses one design system (midnight-ink n
 an aqua scan accent only where images are analysed, self-hosted Inter fonts under the SIL OFL) described in
 `docs/ARCHITECTURE.md`.
 
-## 3. Architecture
+## 🏗️ 3. Architecture
 
 ```mermaid
 flowchart LR
@@ -91,6 +214,13 @@ flowchart LR
   OCR --> MICR["E-13B MICR model"]
   SIG --> PRE["Preprocessing"] --> FEAT["ORB · SIFT · SSIM · HOG · profiles · chamfer"] --> FUS["Fusion model + validated thresholds"]
   API --> DS[("Original datasets – read only")]
+  style UI fill:#61DAFB,color:#000
+  style API fill:#3753f0,color:#fff
+  style OCR fill:#0b8a7c,color:#fff
+  style SIG fill:#0b8a7c,color:#fff
+  style FUS fill:#3fb68b,color:#fff
+  style MICR fill:#22d3c0,color:#000
+  style ENG fill:#22d3c0,color:#000
 ```
 
 Cheque workflow: upload → validate file (magic bytes, size, decode) → image quality → OCR + MICR →
@@ -98,13 +228,13 @@ Cheque workflow: upload → validate file (magic bytes, size, decode) → image 
 operator review → signature comparison (only if the signer has an active specimen) → manual
 approve/reject → PDF report → every step written to the audit log.
 
-## 4. Technology
+## 🧰 4. Technology
 
 Backend: Python 3.12+, Flask 3, OpenCV, NumPy, ReportLab, SQLite (stdlib), Waitress (production).
 OCR: PaddleOCR 3.x (auto-detected) or the Tesseract 5 binary. Frontend: React 18, TypeScript 5,
 Vite 5 – no UI library; icons are inline SVG. Tests: pytest, Playwright (end-to-end, run during development).
 
-## 5. Folder structure
+## 📁 5. Folder structure
 
 ```text
 ChequeVerify/
@@ -127,8 +257,9 @@ ChequeVerify/
 │   ├── src/                     main.tsx, App.tsx, api.ts, auth.tsx, router.ts, styles.css, components/, pages/
 │   ├── dist/                    production bundle from `npm run build` (not committed)
 │   ├── package.json, vite.config.ts, tsconfig.json, index.html
-├── docs/                        API.md, ARCHITECTURE.md, OCR_DATASET.md, SIGNATURE_DATASET.md, SIGNATURE_ENROLLMENT.md,
+├── docs/                        demo/ (tour video, GIF, banner), screenshots/, API.md, ARCHITECTURE.md, OCR_DATASET.md, SIGNATURE_DATASET.md, SIGNATURE_ENROLLMENT.md,
 │                                SIGNATURE_EVALUATION_PROTOCOL.md, SECURITY.md
+├── scripts/demo/                renders the README product-tour video from the screenshots
 ├── reports/final/               audits, evaluations, test results, completion report
 ├── dataset/                     ← put the OCR dataset here (train/ vaildate/ test/ <bank>/)
 ├── signature/                   ← put the signature dataset here (genuine_signatures.csv …)
@@ -139,7 +270,7 @@ ChequeVerify/
 └── README.md
 ```
 
-## 6. Datasets
+## 📚 6. Datasets
 
 **OCR dataset (`dataset/`)** – 120 cheque images, 4 banks (Axis, Canara, ICICI, Syndicate),
 split 80/20/20 (5 per bank in val and test), no corrupted files, no exact duplicates or cross-split
@@ -158,7 +289,7 @@ faked, the original file is not changed, and the result is labelled as a dataset
 that runs the server: on the Docker/Render copy the folder is empty by design (the datasets are private), so load cheques there with
 *Batch upload* or the upload box.
 
-## 7. Models and results (held-out test split, measured – not estimated)
+## 📈 7. Models and results (held-out test split, measured – not estimated)
 
 | Component | What was trained | Test result |
 |---|---|---|
@@ -172,7 +303,7 @@ Full numbers, protocol and caveats: `reports/final/MODEL_EVALUATION.md`.
 Positive signature pairs are *simulated re-captures* of the single genuine image, because the dataset
 has no second genuine specimen – this is the main limitation of the signature results.
 
-## 8. Installation (Windows – your existing machine)
+## ⚙️ 8. Installation (Windows – your existing machine)
 
 Prerequisites: Python 3.12 (your `.venv312` works), Node.js 18+, and an OCR engine:
 either your existing PaddleOCR 3.x environment (auto-detected) or
@@ -222,7 +353,7 @@ How it works, what it does and does not prove, and how to set it up: `docs/AUTHE
 Suggested first steps in the app: Signature enrollment → *Import from dataset* (creates the 120 signers),
 then Cheque verification → upload a cheque from `dataset/test/...` → Verify signature.
 
-### Live deployment
+### 🌐 Live deployment
 
 **Status (2026-11-01): not deployed - there is no public address yet.** Creating the service on Render needs the owner's Render
 sign-in and the administrator password typed into Render's form, which nobody else can do for them. The application, the
@@ -239,7 +370,7 @@ service itself. Frontend and backend are one service, so there will be a single 
 The exact steps for the owner (about 10 minutes, free plan, no card) are in `reports/final/FINAL_DEPLOYMENT_REPORT.md`, section 2.
 This table is replaced with the real addresses only after they have been opened and checked, and the report shows what was seen.
 
-### Deploy (Docker / Render)
+### 🚀 Deploy (Docker / Render)
 
 ```bash
 docker build -t chequeverify .
@@ -266,7 +397,7 @@ plan (a tenth of a CPU) expect roughly half a minute each, an estimate not yet m
 
 The previous implementation (v1) is preserved unchanged under `legacy/`.
 
-## 9. Configuration (`backend/.env`)
+## 🔧 9. Configuration (`backend/.env`)
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -282,7 +413,7 @@ The previous implementation (v1) is preserved unchanged under `legacy/`.
 | `CV_TOKEN_MAX_AGE` | 28800 | Session lifetime (seconds) |
 | `CV_INSTANCE_DIR`, `CV_STORAGE_DIR`, `CV_DATABASE`, `CV_MODELS_DIR`, `CV_REPORTS_DIR` | under backend/ | Storage locations |
 
-## 10. Command-line tasks
+## 💻 10. Command-line tasks
 
 ```bash
 cd backend
@@ -296,7 +427,7 @@ python -m pytest -q                       # the backend test suite
 ```
 The same jobs can be started from the Model training screen (admin).
 
-## 11. Security
+## 🔐 11. Security
 
 Summary (details in `docs/SECURITY.md` and `reports/final/SECURITY_AUDIT.md`): signed bearer tokens
 with server-side revocation, three roles enforced on every endpoint, enrollment admin-only, specimen
@@ -308,7 +439,7 @@ other security headers, `scripts/prepush_audit.py` against private data in git. 
 ready** without HTTPS, an external identity provider/MFA, encrypted storage, retention policies and an
 independent security test (open items: `docs/SECURITY.md`).
 
-## 12. Limitations
+## ⚠️ 12. Limitations
 
 - The OCR dataset has no text labels: field accuracy can only be measured for the cheque number;
   other fields are checked by self-consistency and cross-reference, not ground truth. Staff
@@ -328,14 +459,14 @@ independent security test (open items: `docs/SECURITY.md`).
 - Speed: about 4 s of OCR per cheque on 2 CPUs; eight uploads at once take about 18 s in total. A small hosted instance is slower.
 - Not verified: a real Render deployment, real email delivery (SMTP), and the Render disk's behaviour (documentation only).
 
-## 13. Future scope
+## 🔮 13. Future scope
 
 Collect genuine specimens over several days and real skilled forgeries (`docs/SIGNATURE_ENROLLMENT.md`), evaluate with
 `docs/SIGNATURE_EVALUATION_PROTOCOL.md`, and only then consider a metric-learning model;
 label handwritten field crops (the review screen already records corrections) and fine-tune PaddleOCR
 recognition; layout detection for unseen templates; MFA/SSO; encrypted object storage; PostgreSQL.
 
-## 14. Troubleshooting
+## 🛠️ 14. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -350,9 +481,19 @@ recognition; layout detection for unseen templates; MFA/SSO; encrypted object st
 | `413 image_too_large` | The image has more pixels than `CV_MAX_IMAGE_PIXELS` (12 megapixels in the Docker image, 25 without). Scan at 300 dpi or raise the limit on a host with more memory. |
 | `503 busy` | Two images are already being processed. Try again after a few seconds (`Retry-After: 5`). |
 
-## 15. Status
+## 📌 15. Status
 
 Current task status and known issues: `docs/MASTER_PROJECT_NOTES.md`. Final report with evidence-based readiness figures:
 `reports/final/FINAL_COMPLETION_REPORT.md`; regression: `reports/final/PHASE6_REGRESSION_RESULTS.md`; deployment:
 `reports/final/DEPLOYMENT_VERIFICATION.md`; dataset: `reports/final/DATASET_TEST_RESULTS.md`; security:
 `reports/final/SECURITY_AUDIT.md`. Earlier audit: `reports/final/PRODUCTION_READINESS_AUDIT.md`.
+
+---
+
+<div align="center">
+
+**Built with 🏦 + 🤖 to make cheque processing faster, safer and auditable**
+
+⭐ If you found this project useful, please give it a star!
+
+</div>
